@@ -3,15 +3,14 @@
 [Back to README](../README.md)
 
 Requires Homebrew, Apple Silicon, macOS 15+, and Xcode 26+ with an iOS simulator runtime.
-Homebrew installs the runtime dependencies.
+Node and Python are bundled privately; installing iSimBot does not upgrade your global runtimes.
 
 ## Homebrew
 
-The public formula is not yet available. Once published in this repository:
+Install from our [Homebrew tap](https://github.com/wei0121/homebrew-tap):
 
 ```bash
-brew tap wei0121/isimbot-mcp https://github.com/wei0121/iSimBot-mcp.git
-brew install wei0121/isimbot-mcp/isimbot-mcp
+brew install wei0121/tap/isimbot-mcp
 isimbot setup
 ```
 
@@ -26,15 +25,8 @@ npm ci
 npm run brew:prepare
 brew tap-new local/isimbot # Skip if this tap already exists.
 cp homebrew/isimbot-mcp.rb "$(brew --repository local/isimbot)/Formula/isimbot-mcp.rb"
-brew tap facebook/fb
 brew install local/isimbot/isimbot-mcp
 isimbot setup
-```
-
-If Homebrew requires tap trust, run:
-
-```bash
-brew trust --formula facebook/fb/idb facebook/fb/idb-cli facebook/fb/idb-companion
 ```
 
 After source changes or moving the checkout, regenerate and copy the formula,

@@ -1,4 +1,6 @@
 # Local test formula. Regenerate with npm run brew:prepare; do not edit generated values.
+# idb resource definitions adapted from facebook/homebrew-fb (Meta Platforms).
+# See THIRD_PARTY_LICENSES/homebrew-fb.txt for the upstream BSD license.
 class IsimbotMcp < Formula
   desc "iSimBot-MCP: MCP server for iOS simulator automation"
   homepage "https://github.com/wei0121/iSimBot-mcp"
@@ -10,19 +12,121 @@ class IsimbotMcp < Formula
   depends_on arch: :arm64
   depends_on macos: :sequoia
   depends_on xcode: "26.0"
-  depends_on "node"
-  depends_on "facebook/fb/idb"
+  resource "node-runtime" do
+    url "https://nodejs.org/dist/v24.22.2/node-v24.22.2-darwin-arm64.tar.gz"
+    sha256 "aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a"
+  end
+
+  resource "python-runtime" do
+    url "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz"
+    sha256 "95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9"
+  end
+
+
+  resource "fb-idb" do
+    url "https://github.com/facebook/idb/releases/download/v1.7.8/fb_idb-1.7.8-py3-none-any.whl"
+    sha256 "ed8557a4c54ffee53006c1fe63f070cda567949312ab24be56faf987c5a3d04b"
+  end
+
+  resource "aiofiles" do
+    url "https://files.pythonhosted.org/packages/41/c3/534eac40372d8ee36ef40df62ec129bee4fdb5ad9706e58a29be53b2c970/aiofiles-25.1.0.tar.gz"
+    sha256 "a8d728f0a29de45dc521f18f07297428d56992a742f0cd2701ba86e44d23d5b2"
+  end
+
+  resource "grpclib" do
+    url "https://files.pythonhosted.org/packages/5b/28/5a2c299ec82a876a252c5919aa895a6f1d1d35c96417c5ce4a4660dc3a80/grpclib-0.4.9.tar.gz"
+    sha256 "cc589c330fa81004c6400a52a566407574498cb5b055fa927013361e21466c46"
+  end
+
+  resource "h2" do
+    url "https://files.pythonhosted.org/packages/e7/85/7c366e69d84c17bb778fe41419e1fbcce3033d5b7ce29bbffff0a98b859f/h2-4.4.1.tar.gz"
+    sha256 "4e866ffb1a869ae14dd9b5e6beb5c24a13da0495ad72b65925ded182521c1516"
+  end
+
+  resource "hpack" do
+    url "https://files.pythonhosted.org/packages/26/5b/fcabf6028144a8723726318b07a32c2f3314acdff6265743cf08a344b18e/hpack-4.2.0.tar.gz"
+    sha256 "0895cfa3b5531fc65fe439c05eb65144f123bf7a394fcaa56aa423548d8e45c0"
+  end
+
+  resource "hyperframe" do
+    url "https://files.pythonhosted.org/packages/02/e7/94f8232d4a74cc99514c13a9f995811485a6903d48e5d952771ef6322e30/hyperframe-6.1.0.tar.gz"
+    sha256 "f630908a00854a7adeabd6382b43923a4c4cd4b821fcb527e6ab9e15382a3b08"
+  end
+
+  resource "multidict" do
+    url "https://files.pythonhosted.org/packages/81/08/7036c080d7117f28a4af526d794aab6a84463126db031b007717c1a6676e/multidict-6.7.1-py3-none-any.whl"
+    sha256 "55d97cc6dae627efa6a6e548885712d4864b81110ac76fa4e534c03819fa4a56"
+  end
+
+  resource "protobuf" do
+    url "https://files.pythonhosted.org/packages/19/c7/5f7c636ec43e0c545e28d1f1db71990108306f7bdcb89f069ba97e428e7f/protobuf-7.35.1-py3-none-any.whl"
+    sha256 "4bc97768d8fe4ad6743c8a19403e314511ed9f6d13205b687e52421c023ac1b9"
+  end
+
+  resource "idb-companion" do
+    url "https://github.com/facebook/idb/releases/download/v1.7.8/idb-companion.macos-arm64.tar.gz"
+    sha256 "44369a2df0b62e3a1764de61bd09280999c7e9b27ea8f20bff1ea3a9db0302a2"
+  end
+
 
   def install
-    # The local archive includes compiled JS and the exact npm lockfile.
-    libexec.install "dist", "package.json", "package-lock.json"
-    cd libexec do
-      system Formula["node"].opt_bin/"npm", "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"
+    node = libexec/"node"
+    python = libexec/"python"
+    resource("node-runtime").stage { node.install Dir["*"] }
+    resource("python-runtime").stage { python.install Dir["*"] }
+    ENV.prepend_path "PATH", node/"bin"
+
+    # All Python packages live inside our standalone interpreter, not global Python.
+    resources.reject { |r| %w[node-runtime python-runtime idb-companion].include?(r.name) }.each do |r|
+      r.stage do
+        target = Pathname.pwd
+        target /= r.downloader.basename if r.url.end_with?(".whl")
+        system python/"bin/python3", "-I", "-m", "pip", "install", "--no-deps", "--no-compile",
+               "--disable-pip-version-check", target
+      end
     end
+    companion = libexec/"idb-companion"
+    resource("idb-companion").stage { companion.install Dir["*"] }
+    odie "idb_companion missing from archive" unless (companion/"idb_companion").exist?
+    odie "Companion resources missing" unless (companion/"Resources/libShimulator-iOS.dylib").exist?
+
+    npm = node/"lib/node_modules/npm/bin/npm-cli.js"
+    if (buildpath/"src").directory?
+      system node/"bin/node", npm, "ci", "--include=dev", "--ignore-scripts", "--no-audit", "--no-fund"
+      system node/"bin/node", npm, "run", "build"
+      system node/"bin/node", npm, "prune", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"
+    else
+      system node/"bin/node", npm, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"
+    end
+    libexec.install "dist", "node_modules", "package.json", "package-lock.json"
     chmod 0755, libexec/"dist/index.js"
-    # Desktop clients may have a minimal PATH. Keep stable opt paths across upgrades.
-    runtime_path = [Formula["node"].opt_bin, Formula["facebook/fb/idb-cli"].opt_bin,
-                    Formula["facebook/fb/idb-companion"].opt_bin, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(":")
+
+    # Keep runtime binaries and licenses; discard build/install tools and documentation.
+    rm_r [node/"include", node/"share", node/"lib"]
+    (node/"bin").children.each { |p| rm p unless p.basename.to_s == "node" }
+    rm [node/"README.md", node/"CHANGELOG.md"]
+    rm_r python/"include"
+    stdlib = python/"lib/python3.14"
+    %w[test idlelib tkinter turtledemo ensurepip].each do |name|
+      rm_r stdlib/name if (stdlib/name).exist?
+    end
+    rm_r python/"share/man" if (python/"share/man").exist?
+    (stdlib/"site-packages").glob("pip{,-*.dist-info}").each { |p| rm_r p }
+    python.glob("lib/**/*.a").each { |p| rm p }
+    python.glob("lib/**/__pycache__").each { |p| rm_r p }
+    (python/"bin").children.each do |p|
+      rm p unless %w[python python3 python3.14].include?(p.basename.to_s)
+    end
+
+    # Expose only isimbot globally. idb's interpreter is selected explicitly.
+    (libexec/"bin").mkpath
+    (libexec/"bin/idb").write <<~SH
+      #!/bin/sh
+      exec "#{opt_libexec}/python/bin/python3" -I -m idb.cli.main "$@"
+    SH
+    chmod 0755, libexec/"bin/idb"
+    runtime_path = [opt_libexec/"node/bin", opt_libexec/"bin", opt_libexec/"idb-companion",
+                    "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(":")
     (bin/"isimbot").write_env_script opt_libexec/"dist/index.js",
       PATH: runtime_path, ISIMBOT_LAUNCHER: (opt_bin/"isimbot").to_s
   end
@@ -44,10 +148,16 @@ class IsimbotMcp < Formula
   end
 
   test do
+    assert_match "v24.", shell_output("#{libexec}/node/bin/node --version")
+    assert_match "Python 3.14.", shell_output("#{libexec}/python/bin/python3 --version")
+    refute_path_exists libexec/"node/bin/npm"
+    refute_path_exists libexec/"python/lib/python3.14/site-packages/pip"
+    assert_match "usage", shell_output("#{libexec}/bin/idb --help")
+    assert_match "build_date", shell_output("#{libexec}/idb-companion/idb_companion --version")
     assert_match version.to_s, shell_output("#{bin}/isimbot --version")
     assert_match "isimbot setup", shell_output("#{bin}/isimbot --help")
     # Exercise the native image dependency without opening or changing a simulator.
-    system Formula["node"].opt_bin/"node", "--input-type=module", "-e", <<~JS
+    system libexec/"node/bin/node", "--input-type=module", "-e", <<~JS
       import { createRequire } from 'node:module';
       const sharp = createRequire('#{libexec}/package.json')('sharp');
       const image = await sharp({create: {width: 10, height: 20, channels: 3, background: 'white'}}).png().toBuffer();

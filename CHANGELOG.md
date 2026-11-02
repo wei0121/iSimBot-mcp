@@ -1,8 +1,10 @@
 # iSimBot-MCP changelog
 
-## Unreleased
+## 1.0.2
 
 ### Changed
+
+- Homebrew bundles trimmed private Node and Python runtimes without upgrading global runtimes.
 
 - Project and MCP server display name: **iSimBot-MCP**.
 
@@ -29,6 +31,4 @@
 
 - Local Homebrew packaging includes compiled JavaScript and locked dependencies.
 
-The package version remains 1.0.0. These are local source changes, not a claim
-that a public release has been published. Existing installations require a
-separate update and MCP client restart.
+Existing installations require an update and MCP client restart.
