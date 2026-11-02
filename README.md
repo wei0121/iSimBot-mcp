@@ -2,7 +2,7 @@
 
 **Let your AI agent see and control your iOS Simulator.**
 
-Tap, swipe, type, and capture screenshots — through Claude Code, Codex, or any MCP client.
+Tap, swipe, type, capture and more — through Claude Code, Codex, or any MCP client.
 
 ![iSimBot-MCP demo](doc/iSImBotDemo.gif)
 

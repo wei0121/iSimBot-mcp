@@ -27,3 +27,10 @@ Support authorized Android phones through ADB and evaluate WDA/XCUITest for iPho
 Android requires USB debugging and host authorization; iPhone requires developer
 setup plus a configured automation runner. Validate screenshots, gestures, input,
 and operation chains separately on each platform.
+
+## 5. Device control
+
+Switch between portrait and landscape, lock/unlock the screen, and query device
+state. Support these actions in operation chains, with platform limitations made
+explicit. The current `press_button` tool already exposes the lock button;
+explicit lock/unlock state control is planned.
