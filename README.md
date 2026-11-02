@@ -1,13 +1,10 @@
 # iSimBot-MCP
 
-Let Claude Code, Codex, and other MCP clients operate your iOS Simulator:
-tap, swipe, type, inspect screens, and run operation chains with screenshots.
+**Let your AI agent see and control your iOS Simulator.**
 
-**CLI:** `isimbot` · **Package:** `isimbot-mcp`
+Tap, swipe, type, and capture screenshots — through Claude Code, Codex, or any MCP client.
 
-Build your app with Xcode first; iSimBot-MCP installs and interacts with the built app.
-
-<!-- Add the demo GIF here when ready. -->
+![iSimBot-MCP demo](doc/iSImBotDemo.gif)
 
 ## Quick Start
 
