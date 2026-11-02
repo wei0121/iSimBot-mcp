@@ -7,8 +7,15 @@ Homebrew installs the runtime dependencies.
 
 ## Homebrew
 
-The public tap is not published yet. Once available, use the commands in
-[Quick Start](../README.md#quick-start), then run `isimbot setup` and restart your MCP client.
+The public formula is not yet available. Once published in this repository:
+
+```bash
+brew tap wei0121/isimbot-mcp https://github.com/wei0121/iSimBot-mcp.git
+brew install wei0121/isimbot-mcp/isimbot-mcp
+isimbot setup
+```
+
+Choose your MCP client, then restart it.
 
 ## Local installation
 

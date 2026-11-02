@@ -13,12 +13,12 @@ Build your app with Xcode first; iSimBot-MCP installs and interacts with the bui
 
 Requires Homebrew, Apple Silicon, macOS 15+, and Xcode 26+ with an iOS simulator runtime.
 
-> The public Homebrew tap has not been published yet. `YOUR_GITHUB_OWNER` below
-> is a placeholder and will be replaced with the official owner before release.
+> The public Homebrew formula is not yet available. The installation commands
+> below will work once it is published in this repository.
 
 ```bash
-brew tap YOUR_GITHUB_OWNER/tap
-brew install isimbot-mcp
+brew tap wei0121/isimbot-mcp https://github.com/wei0121/iSimBot-mcp.git
+brew install wei0121/isimbot-mcp/isimbot-mcp
 isimbot setup
 ```
 

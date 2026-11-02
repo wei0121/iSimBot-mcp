@@ -1,7 +1,7 @@
 # Local test formula. Regenerate with npm run brew:prepare; do not edit generated values.
 class IsimbotMcp < Formula
   desc "iSimBot-MCP: MCP server for iOS simulator automation"
-  homepage "https://github.com/kleinanzeigen/ios-simulator-bot-mcp"
+  homepage "https://github.com/wei0121/iSimBot-mcp"
   url "@ARCHIVE_URL@"
   version "@VERSION@"
   sha256 "@SHA256@"

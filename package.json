@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kleinanzeigen/ios-simulator-bot-mcp.git"
+    "url": "https://github.com/wei0121/iSimBot-mcp.git"
   },
   "engines": {
     "node": ">=20.9.0"
