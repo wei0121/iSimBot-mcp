@@ -1,0 +1,25 @@
+# Glama inspection image: runs the real stdio MCP server for initialize/tools/list.
+# Simulator operations require macOS, Xcode and IDB and cannot run in this image.
+# Build from the repository root:
+#   docker build -f Dockerfile.glama -t wr-isimbot-glama:local .
+# Run with stdin open (no TTY):
+#   docker run --rm -i wr-isimbot-glama:local
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev --no-audit --no-fund
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build && npm prune --omit=dev --no-audit --no-fund
+
+FROM node:24-bookworm-slim AS inspection
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY LICENSE ./LICENSE
+
+USER node
+CMD ["node", "dist/index.js"]

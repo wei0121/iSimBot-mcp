@@ -1,0 +1,10 @@
+# Only send the files required to build the inspection image.
+**
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!src/**
+!LICENSE
+!Dockerfile.glama
+!Dockerfile.glama.dockerignore
