@@ -5,6 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { IDBClient } from '../operation/idb-client.js';
 import { tools } from './registry.js';
+import { errorResult } from './tool-error.js';
 import { version } from '../version.js';
 
 export function createServer(client = new IDBClient(), settings = new ScreenshotSettingsStore()): Server {
@@ -28,9 +29,7 @@ export function createServer(client = new IDBClient(), settings = new Screenshot
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {
       return {
-        content: [{ type: 'text', text: JSON.stringify({
-          success: false, error: (error as Error).message,
-        }, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify(errorResult(error), null, 2) }],
         isError: true,
       };
     }

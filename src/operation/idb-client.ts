@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface Device {
   udid: string;
@@ -221,7 +222,7 @@ export class IDBClient {
     }
 
     try {
-      await execAsync(`idb launch ${bundleId} --udid "${this.udid}"`, { timeout: 10000 });
+      await execFileAsync('idb', ['launch', '--udid', this.udid, bundleId], { timeout: 10000 });
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for app to launch
     } catch (error) {
       throw new Error(`Failed to launch app ${bundleId}: ${(error as Error).message}`);

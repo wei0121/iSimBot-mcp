@@ -41,7 +41,7 @@ Optional parameters show their defaults. Durations and delays are in seconds.
 | `set_location` | `latitude`, `longitude` | — |
 | `describe_ui` | — | — |
 | `get_logs` | — | `lines: 100` |
-| `screenshot` | — | `path` (otherwise managed automatically) |
+| `screenshot` | — | `path`, `scale`, `format`, `quality`, `maxBytes` |
 | `setup` | — | Screenshot settings below |
 | `operation_chain` | `steps` | — |
 
@@ -55,14 +55,18 @@ Failures set `isError`.
 ## Screenshot settings
 
 MCP `setup` reads settings with `{}` or updates them, for example `{"scale": 0.5}`.
-It is separate from the CLI setup command.
+It is separate from the CLI setup command. Existing saved settings are preserved.
+
+For a single capture, pass overrides directly to `screenshot` (also inside chains):
+`{"scale": 0.3, "format": "jpeg", "quality": 60, "maxBytes": 2000000}`.
+These do not persist. Size errors include actual bytes, limits, and suggested retry arguments.
 
 | Setting | Default | Accepted values |
 | --- | --- | --- |
-| `scale` | `1` | `0.1`–`4`, relative to native device pixels, independent of window size |
+| `scale` | `0.6` | `0.1`–`4`, relative to native device pixels, independent of window size |
 | `format` | `"png"` | `"png"`, `"jpeg"` |
 | `quality` | `80` | `40`–`100`, JPEG only |
-| `maxBytes` | `1000000` | `10000`–`5000000`, before Base64 encoding |
+| `maxBytes` | `2000000` | `10000`–`5000000`, before Base64 encoding |
 | `maxSavedImages` | `200` | Integer `1`–`10000` |
 
 There is no maximum width or height setting. Scale is never silently reduced;

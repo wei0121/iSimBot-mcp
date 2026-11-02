@@ -82,3 +82,50 @@ test('MCP setup configures subsequent image responses, survives server recreatio
     } finally { await client.close(); await server.close(); }
   }
 });
+
+test('per-call screenshot overrides, actionable errors and chain validation preserve saved settings', async t => {
+  const dir = fixture(t);
+  const source = join(dir, 'noise.png');
+  await sharp(randomBytes(200 * 400 * 3), { raw: { width: 200, height: 400, channels: 3 } }).png().toFile(source);
+  const store = new ScreenshotSettingsStore(join(dir, 'settings.json'));
+  assert.equal(store.read().scale, 0.6);
+  assert.equal(store.read().maxBytes, 2000000);
+  store.update({ scale: 1 });
+  const originalSettings = readFileSync(store.path, 'utf8');
+  let captures = 0;
+  const fake = { screenshot: async output => { captures++; copyFileSync(source, output); return output; } };
+  const server = createServer(fake, store);
+  const client = new Client({ name: 'test', version: '1' });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  try {
+    await server.connect(a); await client.connect(b);
+    const override = await client.callTool({ name: 'screenshot', arguments: { scale: 0.2, format: 'jpeg', quality: 60, maxBytes: 2000000 } });
+    assert.equal(override.content[1].mimeType, 'image/jpeg');
+    assert.equal(JSON.parse(override.content[0].text).returnedWidth, 40);
+    const next = await client.callTool({ name: 'screenshot', arguments: {} });
+    assert.equal(JSON.parse(next.content[0].text).returnedWidth, 200);
+    const bad = await client.callTool({ name: 'screenshot', arguments: { scale: 1, maxBytes: 10000 } });
+    assert.equal(bad.isError, true);
+    const error = JSON.parse(bad.content[0].text);
+    assert.equal(error.code, 'SCREENSHOT_TOO_LARGE');
+    assert.ok(error.actualBytes > error.maxBytes);
+    assert.equal(error.allowedMaxBytes.maximum, 5000000);
+    const retried = await client.callTool({ name: error.retry.tool, arguments: error.retry.arguments });
+    assert.ok(!retried.isError);
+    const chain = await client.callTool({ name: 'operation_chain', arguments: { steps: [
+      { tool: 'screenshot', arguments: { scale: 0.2, quality: 60, maxBytes: 2000000 }, delay: 0 },
+      { tool: 'screenshot', arguments: { scale: 1, maxBytes: 10000 }, delay: 0 },
+    ] } });
+    assert.equal(JSON.parse(chain.content[0].text).steps[1].code, 'SCREENSHOT_TOO_LARGE');
+    const before = captures;
+    const invalid = await client.callTool({ name: 'operation_chain', arguments: { steps: [
+      { tool: 'screenshot', delay: 0 },
+      { tool: 'screenshot', arguments: { maxBytes: 9000000 }, delay: 0 },
+    ] } });
+    assert.equal(invalid.isError, true);
+    assert.equal(captures, before);
+    const invalidSetting = await client.callTool({ name: 'setup', arguments: { maxBytes: 9000000 } });
+    assert.match(JSON.parse(invalidSetting.content[0].text).error, /10000.*5000000/);
+    assert.equal(readFileSync(store.path, 'utf8'), originalSettings);
+  } finally { await client.close(); await server.close(); }
+});

@@ -1,4 +1,5 @@
 import sharp from 'sharp';
+import { ToolError } from '../mcp/tool-error.js';
 import type { ScreenshotSettings } from '../setting/screenshot-settings.js';
 
 export async function processScreenshot(path: string, settings: ScreenshotSettings) {
@@ -9,10 +10,12 @@ export async function processScreenshot(path: string, settings: ScreenshotSettin
   const height = Math.max(1, Math.round(original.height * settings.scale));
   if (width * height > 100_000_000) throw new Error('Requested scale exceeds the 100 megapixel processing limit; choose a smaller scale.');
   let quality = settings.quality;
+  let actualBytes = 0;
   for (let attempt = 0; attempt < 8; attempt++) {
     let pipeline = source.clone().resize({ width, height, fit: 'fill' });
     pipeline = settings.format === 'png' ? pipeline.png({ compressionLevel: 9 }) : pipeline.flatten({ background: '#ffffff' }).jpeg({ quality });
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
+    actualBytes = data.length;
     if (data.length <= settings.maxBytes) {
       const base64 = data.toString('base64');
       return { metadata: {
@@ -27,5 +30,13 @@ export async function processScreenshot(path: string, settings: ScreenshotSettin
     if (settings.format === 'jpeg' && quality > 40) { quality = Math.max(40, quality - 10); continue; }
     break;
   }
-  throw new Error('Cannot meet maxBytes at the requested scale. Increase maxBytes, lower scale via setup, or choose JPEG.');
+  const retryScale = Math.max(0.1, Math.floor(settings.scale * Math.sqrt(settings.maxBytes / actualBytes) * 0.8 * 100) / 100);
+  const retryArguments = { scale: retryScale, format: 'jpeg', quality: 60, maxBytes: settings.maxBytes };
+  throw new ToolError(
+    `Screenshot exceeds maxBytes at the requested scale: ${actualBytes} bytes > ${settings.maxBytes} bytes (${width}x${height}, ${settings.format}, scale ${settings.scale}). No image returned; scale was not silently changed. Retry screenshot with the suggested arguments; setup is not required.`,
+    { code: 'SCREENSHOT_TOO_LARGE', actualBytes, maxBytes: settings.maxBytes,
+      dimensions: { width, height }, settings, appliedQuality: settings.format === 'jpeg' ? quality : undefined,
+      allowedMaxBytes: { minimum: 10000, maximum: 5000000 },
+      retry: { tool: 'screenshot', arguments: retryArguments, note: 'Estimated smaller output, not guaranteed to fit. Overrides apply only to the retry; saved settings remain unchanged.' } },
+  );
 }

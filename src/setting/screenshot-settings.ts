@@ -11,14 +11,14 @@ export interface ScreenshotSettings {
   maxSavedImages: number;
 }
 export const defaults: ScreenshotSettings = {
-  scale: 1, format: 'png', quality: 80, maxBytes: 1_000_000, maxSavedImages: 200,
+  scale: 0.6, format: 'png', quality: 80, maxBytes: 2_000_000, maxSavedImages: 200,
 };
 export const settingsSchema = {
   maxSavedImages: { type: 'integer', minimum: 1, maximum: 10000, description: 'Maximum automatically saved screenshots, default 200. Updating this value immediately deletes oldest managed screenshots over the limit. Explicit output paths are excluded.' },
-  scale: { type: 'number', minimum: 0.1, maximum: 4, description: 'Multiplier of original screenshot pixel dimensions: 1 = native, 2 = double, 0.5 = half, 0.2 = one fifth. Preserves aspect ratio, rounded to whole pixels.' },
+  scale: { type: 'number', minimum: 0.1, maximum: 4, default: 0.6, description: 'Default 0.6. Multiplier of original screenshot pixel dimensions: 1 = native, 2 = double, 0.5 = half, 0.2 = one fifth. Preserves aspect ratio, rounded to whole pixels.' },
   format: { type: 'string', enum: ['png', 'jpeg'], description: 'PNG (default) preserves UI text without lossy compression. JPEG can save bandwidth.' },
   quality: { type: 'integer', minimum: 40, maximum: 100, description: 'JPEG quality only; ignored for PNG.' },
-  maxBytes: { type: 'integer', minimum: 10_000, maximum: 5_000_000, description: 'Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested scale cannot fit; never silently resizes.' },
+  maxBytes: { type: 'integer', minimum: 10_000, maximum: 5_000_000, default: 2_000_000, description: 'Default 2000000 (2 MB). Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested scale cannot fit; never silently resizes.' },
 };
 export function validateSettings(value: unknown): Partial<ScreenshotSettings> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Screenshot settings must be an object.');
@@ -29,7 +29,7 @@ export function validateSettings(value: unknown): Partial<ScreenshotSettings> {
       if (val !== 'png' && val !== 'jpeg') throw new Error('format must be png or jpeg');
     } else {
       const bounds = { maxSavedImages: [1, 10000], quality: [40, 100], maxBytes: [10_000, 5_000_000] }[key];
-      if (!bounds || typeof val !== 'number' || !Number.isInteger(val) || val < bounds[0] || val > bounds[1]) throw new Error(`Invalid screenshot setting: ${key}`);
+      if (!bounds || typeof val !== 'number' || !Number.isInteger(val) || val < bounds[0] || val > bounds[1]) throw new Error(bounds ? `Invalid screenshot setting: ${key}=${JSON.stringify(val)}. Expected an integer between ${bounds[0]} and ${bounds[1]}${key === 'maxBytes' ? ' bytes (2 MB = 2000000)' : ''}. Retry with a value in this range; settings were not changed.` : `Unknown screenshot setting: ${key}. Allowed fields: scale, format, quality, maxBytes, maxSavedImages.`);
     }
   }
   return value;

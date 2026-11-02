@@ -1,5 +1,11 @@
 # iSimBot-MCP changelog
 
+## 1.0.3
+
+- Fix app launch targeting when multiple simulators are connected.
+- Default screenshots to 0.6x and 2 MB; preserve existing saved settings.
+- Allow per-call screenshot overrides, including in operation chains, with actionable size errors.
+
 ## 1.0.2
 
 ### Changed

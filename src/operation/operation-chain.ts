@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { errorResult } from '../mcp/tool-error.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 
 interface Step {
@@ -19,9 +20,10 @@ function validateArguments(tool: ToolDefinition, args: Record<string, unknown>):
   for (const [key, value] of Object.entries(args)) {
     const rule = schema.properties?.[key] as Record<string, unknown> | undefined;
     if (!rule) throw new Error(`${tool.definition.name}: unknown argument ${key}`);
-    if (rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
+    if (rule.type === 'integer' ? !Number.isInteger(value) : rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
       throw new Error(`${tool.definition.name}: invalid argument ${key}`);
     }
+    if (typeof value === 'number' && ((typeof rule.minimum === 'number' && value < rule.minimum) || (typeof rule.maximum === 'number' && value > rule.maximum))) throw new Error(`${tool.definition.name}: ${key} must be between ${rule.minimum} and ${rule.maximum}; received ${value}.`);
     if (Array.isArray(rule.enum) && !rule.enum.includes(value)) throw new Error(`${tool.definition.name}: invalid ${key}`);
   }
 }
@@ -90,7 +92,7 @@ export function createOperationChain(
             outcomes.push({ step: index + 1, tool: step.tool, success: true, result });
           }
         } catch (error) {
-          outcomes.push({ step: index + 1, tool: step.tool, success: false, error: (error as Error).message });
+          outcomes.push({ step: index + 1, tool: step.tool, ...errorResult(error) });
           failed = true;
           break;
         }
