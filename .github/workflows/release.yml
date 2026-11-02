@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.2'
+          cache: npm
+      - name: Check release version
+        run: node scripts/prepare-release.mjs --check
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm test
+      - name: Build release assets
+        run: node scripts/prepare-release.mjs
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          # Upload everything to a draft before making the release public.
+          # Existing releases are never overwritten automatically.
+          gh release create "$tag" \
+            "homebrew/local/isimbot-mcp-${version}.tar.gz" \
+            homebrew/local/SHA256SUMS \
+            homebrew/local/isimbot-mcp.rb \
+            --verify-tag --draft --title "iSimBot-MCP ${version}" \
+            --notes-file homebrew/local/release-notes.md
+          gh release edit "$tag" --draft=false
