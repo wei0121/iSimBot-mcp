@@ -1,0 +1,50 @@
+{
+  "name": "isimbot-mcp",
+  "version": "1.0.0",
+  "description": "iSimBot-MCP: MCP server for iOS simulator E2E testing via coordinate-based automation",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "isimbot": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "brew:prepare": "node scripts/prepare-homebrew.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "ios",
+    "simulator",
+    "testing",
+    "e2e",
+    "automation",
+    "idb"
+  ],
+  "author": "Kleinanzeigen",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kleinanzeigen/ios-simulator-bot-mcp.git"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "sharp": "^0.35.5",
+    "smol-toml": "^1.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.3.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "doc",
+    "LICENSE"
+  ]
+}

@@ -1,0 +1,58 @@
+# Local test formula. Regenerate with npm run brew:prepare; do not edit generated values.
+class IsimbotMcp < Formula
+  desc "iSimBot-MCP: MCP server for iOS simulator automation"
+  homepage "https://github.com/kleinanzeigen/ios-simulator-bot-mcp"
+  url "@ARCHIVE_URL@"
+  version "@VERSION@"
+  sha256 "@SHA256@"
+  license "MIT"
+
+  depends_on arch: :arm64
+  depends_on macos: :sequoia
+  depends_on xcode: "26.0"
+  depends_on "node"
+  depends_on "facebook/fb/idb"
+
+  def install
+    # The local archive includes compiled JS and the exact npm lockfile.
+    libexec.install "dist", "package.json", "package-lock.json"
+    cd libexec do
+      system Formula["node"].opt_bin/"npm", "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"
+    end
+    chmod 0755, libexec/"dist/index.js"
+    # Desktop clients may have a minimal PATH. Keep stable opt paths across upgrades.
+    runtime_path = [Formula["node"].opt_bin, Formula["facebook/fb/idb-cli"].opt_bin,
+                    Formula["facebook/fb/idb-companion"].opt_bin, "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(":")
+    (bin/"isimbot").write_env_script opt_libexec/"dist/index.js",
+      PATH: runtime_path, ISIMBOT_LAUNCHER: (opt_bin/"isimbot").to_s
+  end
+
+  def caveats
+    <<~EOS
+      iSimBot-MCP is installed. CLI: isimbot.
+
+      Get started:
+        isimbot doctor
+        isimbot setup
+
+      Setup lets you choose Claude Code or Codex.
+      Restart the selected client after configuration.
+
+      Help:
+        isimbot --help
+    EOS
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/isimbot --version")
+    assert_match "isimbot setup", shell_output("#{bin}/isimbot --help")
+    # Exercise the native image dependency without opening or changing a simulator.
+    system Formula["node"].opt_bin/"node", "--input-type=module", "-e", <<~JS
+      import { createRequire } from 'node:module';
+      const sharp = createRequire('#{libexec}/package.json')('sharp');
+      const image = await sharp({create: {width: 10, height: 20, channels: 3, background: 'white'}}).png().toBuffer();
+      const metadata = await sharp(image).metadata();
+      if (metadata.width !== 10 || metadata.height !== 20) process.exit(1);
+    JS
+  end
+end

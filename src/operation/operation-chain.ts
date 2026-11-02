@@ -1,0 +1,107 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { ToolDefinition } from '../mcp/tool-definition.js';
+
+interface Step {
+  tool: string;
+  arguments: Record<string, unknown>;
+  delay: number;
+}
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+// Existing chainable tools use flat primitive schemas. Validate the whole chain
+// before starting, so a typo late in a chain cannot cause earlier side effects.
+function validateArguments(tool: ToolDefinition, args: Record<string, unknown>): void {
+  const schema = tool.definition.inputSchema;
+  for (const key of schema.required || []) {
+    if (!(key in args)) throw new Error(`${tool.definition.name}: missing argument ${key}`);
+  }
+  for (const [key, value] of Object.entries(args)) {
+    const rule = schema.properties?.[key] as Record<string, unknown> | undefined;
+    if (!rule) throw new Error(`${tool.definition.name}: unknown argument ${key}`);
+    if (rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
+      throw new Error(`${tool.definition.name}: invalid argument ${key}`);
+    }
+    if (Array.isArray(rule.enum) && !rule.enum.includes(value)) throw new Error(`${tool.definition.name}: invalid ${key}`);
+  }
+}
+
+export function createOperationChain(
+  operations: ToolDefinition[],
+  sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
+): ToolDefinition {
+  const registry = new Map(operations.filter(t => !['setup', 'operation_chain'].includes(t.definition.name)).map(t => [t.definition.name, t]));
+  return {
+    definition: {
+      name: 'operation_chain',
+      description: 'Execute steps sequentially and return all results/images together. Each delay defaults to 0.3 seconds and is measured after the previous step completes. Example: screenshot, tap with delay 0.3, screenshot with delay 0.3. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 screenshots, 30 seconds total delay (including defaults). Screenshot settings and retention still apply.',
+      inputSchema: {
+        type: 'object', additionalProperties: false, required: ['steps'],
+        properties: {
+          steps: {
+            type: 'array', minItems: 1, maxItems: 20,
+            items: {
+              type: 'object', additionalProperties: false, required: ['tool'],
+              properties: {
+                tool: { type: 'string', enum: [...registry.keys()] },
+                arguments: { type: 'object', description: 'Arguments of the selected tool, using its normal schema; defaults to {}.' },
+                delay: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Seconds to wait AFTER the immediately preceding operation completes, before starting this step. Not an offset from chain start. Default 0.3; use 0 to skip waiting; decimals such as 0.3 are supported. For the first step, waits before the first operation.' },
+              },
+            },
+          },
+        },
+      },
+    },
+    responseType: 'mcp',
+    async execute(client, args, settings): Promise<CallToolResult> {
+      if (Object.keys(args).some(key => key !== 'steps') || !Array.isArray(args.steps) || args.steps.length < 1 || args.steps.length > 20) throw new Error('Provide steps: an array of 1–20 operations.');
+      const steps: Step[] = args.steps.map((raw, index) => {
+        if (!isObject(raw) || Object.keys(raw).some(key => !['tool', 'arguments', 'delay'].includes(key))) throw new Error(`Invalid step ${index + 1}`);
+        if (typeof raw.tool !== 'string' || !registry.has(raw.tool)) throw new Error(`Unsupported tool at step ${index + 1}: ${raw.tool}`);
+        const parameters = raw.arguments === undefined ? {} : raw.arguments;
+        if (!isObject(parameters)) throw new Error(`Invalid arguments at step ${index + 1}`);
+        const delay = raw.delay === undefined ? 0.3 : raw.delay;
+        if (typeof delay !== 'number' || !Number.isFinite(delay) || delay < 0 || delay > 10) throw new Error('delay must be between 0 and 10 seconds.');
+        validateArguments(registry.get(raw.tool)!, parameters);
+        return { tool: raw.tool, arguments: parameters, delay };
+      });
+      if (steps.reduce((sum, step) => sum + step.delay, 0) > 30) throw new Error('Total delay (including defaults) cannot exceed 30 seconds.');
+      if (steps.filter(step => step.tool === 'screenshot').length > 6) throw new Error('At most 6 screenshots per chain.');
+      const outcomes: Record<string, unknown>[] = [];
+      const content: CallToolResult['content'] = [];
+      let imageBytes = 0;
+      let failed = false;
+      for (const [index, step] of steps.entries()) {
+        const tool = registry.get(step.tool)!;
+        try {
+          // The preceding iteration has fully completed; always wait the full
+          // relative interval, even when earlier operations were slow.
+          if (step.delay) await sleep(step.delay * 1000);
+          const result = await tool.execute(client, step.arguments, settings);
+          if (tool.responseType === 'mcp') {
+            const response = result as CallToolResult;
+            const bytes = response.content.reduce((sum, item) => sum + (item.type === 'image' ? item.data.length : 0), 0);
+            if (imageBytes + bytes > 8_000_000) throw new Error('Chain image payload exceeds 8 MB of Base64. Use a lower scale/maxBytes or fewer screenshots.');
+            imageBytes += bytes;
+            content.push({ type: 'text', text: `Step ${index + 1}: ${step.tool}` }, ...response.content);
+            outcomes.push({ step: index + 1, tool: step.tool, success: !response.isError });
+            if (response.isError) { failed = true; break; }
+          } else {
+            outcomes.push({ step: index + 1, tool: step.tool, success: true, result });
+          }
+        } catch (error) {
+          outcomes.push({ step: index + 1, tool: step.tool, success: false, error: (error as Error).message });
+          failed = true;
+          break;
+        }
+      }
+      return {
+        ...(failed ? { isError: true } : {}),
+        content: [{ type: 'text', text: JSON.stringify({
+          success: !failed, steps: outcomes, skippedSteps: steps.length - outcomes.length,
+          ...(failed ? { note: 'Stopped after failure. Earlier operations may have changed the app; nothing was rolled back.' } : {}),
+        }, null, 2) }, ...content],
+      };
+    },
+  };
+}

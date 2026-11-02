@@ -1,0 +1,397 @@
+[
+  {
+    "name": "list_devices",
+    "description": "List all available iOS simulators and devices",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "connect_device",
+    "description": "Connect to a specific iOS simulator or device by UDID",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "udid": {
+          "type": "string",
+          "description": "Device UDID"
+        }
+      },
+      "required": [
+        "udid"
+      ]
+    }
+  },
+  {
+    "name": "tap",
+    "description": "Tap at specific coordinates on the screen",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "X coordinate"
+        },
+        "y": {
+          "type": "number",
+          "description": "Y coordinate"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "double_tap",
+    "description": "Double tap at specific coordinates",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "X coordinate"
+        },
+        "y": {
+          "type": "number",
+          "description": "Y coordinate"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "long_press",
+    "description": "Long press at specific coordinates",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "X coordinate"
+        },
+        "y": {
+          "type": "number",
+          "description": "Y coordinate"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Press duration in seconds (default: 1.0)",
+          "default": 1
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "swipe",
+    "description": "Swipe from one point to another",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "x1": {
+          "type": "number",
+          "description": "Start X coordinate"
+        },
+        "y1": {
+          "type": "number",
+          "description": "Start Y coordinate"
+        },
+        "x2": {
+          "type": "number",
+          "description": "End X coordinate"
+        },
+        "y2": {
+          "type": "number",
+          "description": "End Y coordinate"
+        },
+        "duration": {
+          "type": "number",
+          "description": "Swipe duration in seconds (default: 0.5)",
+          "default": 0.5
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "scroll",
+    "description": "Scroll by swiping from the supplied start point. Direction describes finger movement, not content movement.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "description": "Finger movement direction: up decreases Y, down increases Y, left decreases X, right increases X."
+        },
+        "distance": {
+          "type": "number",
+          "description": "Distance in the same coordinate units as x1/y1 (default: 200)",
+          "default": 200
+        },
+        "x1": {
+          "type": "number",
+          "description": "Start X coordinate"
+        },
+        "y1": {
+          "type": "number",
+          "description": "Start Y coordinate"
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "direction"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "press_button",
+    "description": "Press a hardware button",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "button": {
+          "type": "string",
+          "enum": [
+            "home",
+            "lock",
+            "volumeUp",
+            "volumeDown"
+          ],
+          "description": "Button to press"
+        }
+      },
+      "required": [
+        "button"
+      ]
+    }
+  },
+  {
+    "name": "type_text",
+    "description": "Type text into the currently focused input field",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Text to type"
+        }
+      },
+      "required": [
+        "text"
+      ]
+    }
+  },
+  {
+    "name": "screenshot",
+    "description": "Take a screenshot of the current screen",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Optional output path (default: temp file)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "describe_ui",
+    "description": "Get the accessibility tree of the current screen",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "boot_simulator",
+    "description": "Boot a simulator by UDID",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "udid": {
+          "type": "string",
+          "description": "Simulator UDID"
+        }
+      },
+      "required": [
+        "udid"
+      ]
+    }
+  },
+  {
+    "name": "shutdown_simulator",
+    "description": "Shutdown a simulator by UDID",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "udid": {
+          "type": "string",
+          "description": "Simulator UDID"
+        }
+      },
+      "required": [
+        "udid"
+      ]
+    }
+  },
+  {
+    "name": "install_app",
+    "description": "Install an app on the connected device",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "appPath": {
+          "type": "string",
+          "description": "Path to .app bundle"
+        }
+      },
+      "required": [
+        "appPath"
+      ]
+    }
+  },
+  {
+    "name": "launch_app",
+    "description": "Launch an app by bundle ID",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "bundleId": {
+          "type": "string",
+          "description": "App bundle ID (e.g., com.example.app)"
+        }
+      },
+      "required": [
+        "bundleId"
+      ]
+    }
+  },
+  {
+    "name": "terminate_app",
+    "description": "Terminate a running app",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "bundleId": {
+          "type": "string",
+          "description": "App bundle ID"
+        }
+      },
+      "required": [
+        "bundleId"
+      ]
+    }
+  },
+  {
+    "name": "uninstall_app",
+    "description": "Uninstall an app from the device",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "bundleId": {
+          "type": "string",
+          "description": "App bundle ID"
+        }
+      },
+      "required": [
+        "bundleId"
+      ]
+    }
+  },
+  {
+    "name": "set_location",
+    "description": "Set GPS location for the simulator",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "latitude": {
+          "type": "number",
+          "description": "Latitude"
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ]
+    }
+  },
+  {
+    "name": "get_logs",
+    "description": "Get device logs",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "number",
+          "description": "Number of lines to retrieve (default: 100)"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "pinch",
+    "description": "Perform pinch gesture (zoom in/out)",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "Center X coordinate"
+        },
+        "y": {
+          "type": "number",
+          "description": "Center Y coordinate"
+        },
+        "scale": {
+          "type": "number",
+          "description": "Scale factor (>1 = zoom in, <1 = zoom out, default: 2.0)",
+          "default": 2
+        },
+        "duration": {
+          "type": "number",
+          "description": "Gesture duration in seconds (default: 0.5)",
+          "default": 0.5
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    }
+  }
+]
