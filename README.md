@@ -27,4 +27,23 @@ Choose **Claude Code** or **Codex**, then restart the client. Try:
 
 - [Contribute](doc/contribute.md)
 
+## Source Code
+
+This repository contains the full TypeScript implementation of the MCP server.
+Homebrew is only the distribution method.
+
+- [Server entry point](src/index.ts)
+- [MCP server and request handlers](src/mcp/server.ts)
+- [Tool registry](src/mcp/registry.ts)
+- [Simulator operations](src/operation/)
+
+Build from source with Node.js 20.9+:
+
+```bash
+npm ci
+npm run build
+```
+
+Actual simulator operations require macOS, Xcode, and IDB.
+
 MIT — see [LICENSE](LICENSE).
