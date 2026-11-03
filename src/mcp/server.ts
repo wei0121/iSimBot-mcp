@@ -1,3 +1,4 @@
+import { DeviceManager, deviceToolDefinition } from '../operation/device-manager.js';
 import { ScreenshotSettingsStore } from '../setting/screenshot-settings.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -8,7 +9,8 @@ import { tools } from './registry.js';
 import { errorResult } from './tool-error.js';
 import { version } from '../version.js';
 
-export function createServer(client = new IDBClient(), settings = new ScreenshotSettingsStore()): Server {
+export function createServer(client = new IDBClient(), settings = new ScreenshotSettingsStore(), createClient: () => IDBClient = () => new IDBClient()): Server {
+  const devices = new DeviceManager(client, createClient);
   const server = new Server(
     { name: 'iSimBot-MCP', version },
     { capabilities: { tools: {} } },
@@ -17,14 +19,14 @@ export function createServer(client = new IDBClient(), settings = new Screenshot
   if (registry.size !== tools.length) throw new Error('Duplicate MCP tool name');
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: tools.map(tool => tool.definition),
+    tools: tools.map(deviceToolDefinition),
   }));
   server.setRequestHandler(CallToolRequestSchema, async request => {
     try {
       const { name, arguments: args } = request.params;
       const tool = registry.get(name);
       if (!tool) throw new Error(`Unknown tool: ${name}`);
-      const result = await tool.execute(client, args || {}, settings);
+      const result = await devices.execute(tool, args || {}, settings);
       if (tool.responseType === 'mcp') return result as CallToolResult;
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     } catch (error) {

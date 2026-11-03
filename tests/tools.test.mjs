@@ -8,7 +8,7 @@ import { createServer } from '../dist/mcp/server.js';
 const baseline = JSON.parse(readFileSync(new URL('./fixtures/tools.json', import.meta.url)));
 const sorted = tools => [...tools].sort((a, b) => a.name.localeCompare(b.name));
 
-test('stdio entry point publishes the unchanged tool schemas', async () => {
+test('stdio entry point publishes the expected tool schemas', async () => {
   const client = new Client({ name: 'test', version: '1' });
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
@@ -20,12 +20,12 @@ test('stdio entry point publishes the unchanged tool schemas', async () => {
 
 test('MCP dispatch reaches all 19 non-image handlers with shared client and retains errors', async () => {
   const calls = [];
-  const fake = new Proxy({}, { get: (_, method) => async (...args) => {
+  const fake = new Proxy({}, { get: (_, method) => method === 'getConnectedDevice' ? () => 'device' : async (...args) => {
     calls.push([method, args]);
     if (method === 'connect' && args[0] === 'fail') throw new Error('connection failed');
     return method === 'listDevices' ? [] : 'sample';
   } });
-  const server = createServer(fake);
+  const server = createServer(fake, undefined, () => fake);
   const client = new Client({ name: 'test', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair();
   try {
@@ -35,7 +35,6 @@ test('MCP dispatch reaches all 19 non-image handlers with shared client and reta
       ['list_devices', {}, 'listDevices', []],
       ['connect_device', { udid: 'device' }, 'connect', ['device']],
       ['boot_simulator', { udid: 'device' }, 'bootSimulator', ['device']],
-      ['shutdown_simulator', { udid: 'device' }, 'shutdownSimulator', ['device']],
       ['tap', { x: 1, y: 2 }, 'tap', [1, 2]],
       ['double_tap', { x: 1, y: 2 }, 'doubleTap', [1, 2]],
       ['long_press', { x: 1, y: 2 }, 'longPress', [1, 2, undefined]],
@@ -50,6 +49,7 @@ test('MCP dispatch reaches all 19 non-image handlers with shared client and reta
       ['describe_ui', {}, 'describeUI', []],
       ['get_logs', {}, 'getLogs', [undefined]],
       ['set_location', { latitude: 1, longitude: 2 }, 'setLocation', [1, 2]],
+      ['shutdown_simulator', { udid: 'device' }, 'shutdownSimulator', ['device']],
     ];
     for (const [name, args, method, expected] of cases) {
       const result = await client.callTool({ name, arguments: args });

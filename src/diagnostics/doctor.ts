@@ -28,6 +28,7 @@ export async function doctor(): Promise<boolean> {
       console.log(`FAIL ${label}: missing, unavailable, or command failed`);
     }
   }
+  const serverName = process.env.ISIMBOT_SERVER_NAME || 'isimbot';
   for (const client of ['claude', 'codex'] as Client[]) {
     const path = configPath(client);
     if (!existsSync(path)) { console.log(`INFO ${client}: not configured`); continue; }
@@ -35,7 +36,7 @@ export async function doctor(): Promise<boolean> {
       const source = readFileSync(path, 'utf8');
       const config = client === 'claude' ? JSON.parse(source) : parse(source);
       const servers = config?.[client === 'claude' ? 'mcpServers' : 'mcp_servers'];
-      console.log(`INFO ${client}: ${servers?.isimbot ? 'isimbot entry present' : 'no isimbot entry'}`);
+      console.log(`INFO ${client}: ${servers?.[serverName] ? `${serverName} entry present` : `no ${serverName} entry`}`);
     } catch { healthy = false; console.log(`FAIL ${client}: configuration cannot be read or parsed (unchanged)`); }
   }
   console.log('Checks do not boot simulators or verify MCP connections / UI operations.');

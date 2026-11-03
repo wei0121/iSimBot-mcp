@@ -8,15 +8,17 @@ Remove private data from logs and screenshots.
 
 ## Local development
 
-Requires Node.js 20.9+ and npm:
+On a supported Mac, install the project-private environment and test:
 
 ```bash
-npm ci
-npm test
+./scripts/local-setup.sh
+./scripts/local-npm test
 ```
 
-`npm test` builds TypeScript and runs the test suite. Simulator testing also needs
-Xcode and the runtime dependencies; see [local installation](installation.md#local-installation).
+No global Node/Python or Brew installation is needed. See
+[local installation](installation.md#local-installation) for MCP registration.
+If you already have Node.js 20.9+ and npm, `npm ci && npm test` also runs the
+build and unit tests; simulator operations require the additional runtimes.
 
 Keep changes focused, add tests where appropriate, and update usage documentation
 when changing tool behavior. Discuss larger changes in an issue first.

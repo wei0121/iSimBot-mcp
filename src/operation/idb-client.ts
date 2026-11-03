@@ -1,9 +1,34 @@
 #!/usr/bin/env node
-import { exec, execFile } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { resolve } from 'node:path';
+import { clearScreenshotCoordinates } from '../image/screenshot-coordinates.js';
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+
+// Never invoke a shell. Bound both execution time and captured output.
+async function run(file: string, args: (string | number)[], options: { timeout?: number } = {}) {
+  for (const arg of args) {
+    if ((typeof arg !== 'string' && typeof arg !== 'number') ||
+        (typeof arg === 'number' && !Number.isFinite(arg)) ||
+        (typeof arg === 'string' && arg.includes('\0'))) throw new Error('Invalid command argument');
+  }
+  try {
+    return await execFileAsync(file, args.map(String), { timeout: 10000, maxBuffer: 8 * 1024 * 1024, ...options });
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException & { killed?: boolean; stderr?: string };
+    const reason = failure.code === 'ENOENT' ? `${file} was not found. Run isimbot doctor.`
+      : failure.killed ? `${file} timed out. The operation may have completed; inspect the simulator before retrying.`
+      : (failure.stderr?.trim().slice(-2000) || `${file} failed (${failure.code || 'unknown error'}).`);
+    // Do not echo command arguments, which can contain text entered into the app.
+    throw new Error(reason);
+  }
+}
+
+function safeIdentifier(value: string): string {
+  if (typeof value !== 'string' || !value.trim() || value.startsWith('-') || value.includes('\0')) throw new Error('Invalid device or application identifier');
+  return value;
+}
 
 export interface Device {
   udid: string;
@@ -27,10 +52,19 @@ export function parseDevices(stdout: string): Device[] {
 
 export class IDBClient {
   private udid: string | null = null;
+  private screenshotScales = new Map<string, { udid: string; scale: number }>();
+
+  getConnectedDevice() { return this.udid; }
+
+  getScreenshotGeometry(path: string) {
+    const geometry = this.screenshotScales.get(resolve(path));
+    this.screenshotScales.delete(resolve(path));
+    return geometry;
+  }
 
   async listDevices(): Promise<Device[]> {
     try {
-      const { stdout } = await execAsync('idb list-targets --json');
+      const { stdout } = await run('idb', ['list-targets', '--json']);
       return parseDevices(stdout);
     } catch (error) {
       throw new Error(`Failed to list devices: ${(error as Error).message}`);
@@ -39,7 +73,8 @@ export class IDBClient {
 
   async connect(udid: string): Promise<void> {
     try {
-      await execAsync(`idb connect ${udid}`);
+      await run('idb', ['connect', '--', udid], { timeout: 30000 });
+      clearScreenshotCoordinates(this);
       this.udid = udid;
 
       // Auto-reconnect HID for coordinate-based control
@@ -56,9 +91,9 @@ export class IDBClient {
 
     try {
       // Disconnect and reconnect HID to ensure clean state
-      await execAsync(`idb hid disconnect --udid "${this.udid}"`, { timeout: 5000 }).catch(() => {});
+      await run('idb', ['hid', 'disconnect', '--udid', this.udid], { timeout: 5000 }).catch(() => {});
       await new Promise(resolve => setTimeout(resolve, 500));
-      await execAsync(`idb hid connect --udid "${this.udid}"`, { timeout: 5000 });
+      await run('idb', ['hid', 'connect', '--udid', this.udid], { timeout: 5000 });
     } catch (error) {
       // HID reconnect failure is not fatal - it will auto-retry on next operation
       console.error(`HID reconnect warning: ${(error as Error).message}`);
@@ -67,7 +102,7 @@ export class IDBClient {
 
   private async sendTap(x: number, y: number, duration: number): Promise<void> {
     try {
-      await execAsync(`idb ui tap ${x} ${y} --duration ${duration} --udid "${this.udid}"`, { timeout: 10000 });
+      await run('idb', ['ui', 'tap', '--udid', this.udid!, '--duration', duration, '--', x, y], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to tap at (${x}, ${y}): ${(error as Error).message}`);
     }
@@ -99,7 +134,7 @@ export class IDBClient {
     await this.reconnectHID();
 
     try {
-      await execAsync(`idb ui swipe ${x1} ${y1} ${x2} ${y2} --duration ${duration} --udid "${this.udid}"`, { timeout: 10000 });
+      await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', x1, y1, x2, y2], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to swipe from (${x1}, ${y1}) to (${x2}, ${y2}): ${(error as Error).message}`);
     }
@@ -136,7 +171,7 @@ export class IDBClient {
     }
 
     try {
-      await execAsync(`idb ui button ${idbButton} --udid "${this.udid}"`, { timeout: 5000 });
+      await run('idb', ['ui', 'button', '--udid', this.udid, '--', idbButton], { timeout: 5000 });
     } catch (error) {
       throw new Error(`Failed to press ${button}: ${(error as Error).message}`);
     }
@@ -148,9 +183,7 @@ export class IDBClient {
     }
 
     try {
-      // Escape special characters for shell
-      const escapedText = text.replace(/"/g, '\\"').replace(/\$/g, '\\$').replace(/`/g, '\\`');
-      await execAsync(`idb ui text "${escapedText}" --udid "${this.udid}"`, { timeout: 10000 });
+      await run('idb', ['ui', 'text', '--udid', this.udid, '--', text], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to type text: ${(error as Error).message}`);
     }
@@ -161,10 +194,19 @@ export class IDBClient {
       throw new Error('No device connected. Call connect() first.');
     }
 
+    const captureUdid = this.udid;
     const path = outputPath || `${process.env.TMPDIR || '/tmp'}/screenshot-${Date.now()}.png`;
 
     try {
-      await execAsync(`idb screenshot "${path}" --udid "${this.udid}"`, { timeout: 10000 });
+      const { stdout } = await run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 });
+      this.screenshotScales.delete(resolve(path));
+      try {
+        const metadata = JSON.parse(stdout);
+        if (typeof metadata.screen_scale === 'number' && Number.isFinite(metadata.screen_scale) && metadata.screen_scale > 0) {
+          this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale });
+          if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
+        }
+      } catch { /* Older idb versions can return no metadata. Never guess scale. */ }
       return path;
     } catch (error) {
       throw new Error(`Failed to take screenshot: ${(error as Error).message}`);
@@ -177,7 +219,7 @@ export class IDBClient {
     }
 
     try {
-      const { stdout } = await execAsync(`idb ui describe-all --udid "${this.udid}"`, { timeout: 10000 });
+      const { stdout } = await run('idb', ['ui', 'describe-all', '--udid', this.udid], { timeout: 10000 });
       return stdout;
     } catch (error) {
       throw new Error(`Failed to describe UI: ${(error as Error).message}`);
@@ -186,7 +228,7 @@ export class IDBClient {
 
   async bootSimulator(udid: string): Promise<void> {
     try {
-      await execAsync(`xcrun simctl boot ${udid}`);
+      await run('xcrun', ['simctl', 'boot', safeIdentifier(udid)], { timeout: 60000 });
       await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for boot
     } catch (error) {
       // Ignore if already booted
@@ -198,7 +240,7 @@ export class IDBClient {
 
   async shutdownSimulator(udid: string): Promise<void> {
     try {
-      await execAsync(`xcrun simctl shutdown ${udid}`);
+      await run('xcrun', ['simctl', 'shutdown', safeIdentifier(udid)], { timeout: 30000 });
     } catch (error) {
       throw new Error(`Failed to shutdown simulator: ${(error as Error).message}`);
     }
@@ -210,7 +252,7 @@ export class IDBClient {
     }
 
     try {
-      await execAsync(`idb install "${appPath}" --udid "${this.udid}"`, { timeout: 60000 });
+      await run('idb', ['install', '--udid', this.udid, '--', resolve(appPath)], { timeout: 60000 });
     } catch (error) {
       throw new Error(`Failed to install app: ${(error as Error).message}`);
     }
@@ -222,7 +264,7 @@ export class IDBClient {
     }
 
     try {
-      await execFileAsync('idb', ['launch', '--udid', this.udid, bundleId], { timeout: 10000 });
+      await run('idb', ['launch', '--udid', this.udid, safeIdentifier(bundleId)], { timeout: 10000 });
       await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for app to launch
     } catch (error) {
       throw new Error(`Failed to launch app ${bundleId}: ${(error as Error).message}`);
@@ -235,7 +277,7 @@ export class IDBClient {
     }
 
     try {
-      await execAsync(`idb terminate ${bundleId} --udid "${this.udid}"`, { timeout: 10000 });
+      await run('idb', ['terminate', '--udid', this.udid, '--', bundleId], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to terminate app ${bundleId}: ${(error as Error).message}`);
     }
@@ -247,7 +289,7 @@ export class IDBClient {
     }
 
     try {
-      await execAsync(`idb uninstall ${bundleId} --udid "${this.udid}"`, { timeout: 30000 });
+      await run('idb', ['uninstall', '--udid', this.udid, '--', bundleId], { timeout: 30000 });
     } catch (error) {
       throw new Error(`Failed to uninstall app ${bundleId}: ${(error as Error).message}`);
     }
@@ -259,7 +301,7 @@ export class IDBClient {
     }
 
     try {
-      await execAsync(`idb set-location ${latitude} ${longitude} --udid "${this.udid}"`, { timeout: 5000 });
+      await run('idb', ['set-location', '--udid', this.udid, '--', latitude, longitude], { timeout: 5000 });
     } catch (error) {
       throw new Error(`Failed to set location: ${(error as Error).message}`);
     }
@@ -271,7 +313,7 @@ export class IDBClient {
     }
 
     try {
-      const { stdout } = await execAsync(`idb log --tail ${lines} --udid "${this.udid}"`, { timeout: 10000 });
+      const { stdout } = await run('idb', ['log', '--udid', this.udid, '--', '--tail', lines], { timeout: 10000 });
       return stdout;
     } catch (error) {
       throw new Error(`Failed to get logs: ${(error as Error).message}`);

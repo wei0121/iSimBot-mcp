@@ -2,7 +2,10 @@
 
 [Back to README](../README.md)
 
-Planned features, in priority order. No release dates are assigned.
+Multi-simulator operation is implemented in source and awaits release.
+See [Usage](usage.md#multiple-devices).
+
+Planned features below are in priority order. No release dates are assigned.
 
 ## 1. Android emulators
 
@@ -16,19 +19,14 @@ App builds and AVD creation are outside the initial scope.
 Start and stop recordings on iOS and Android simulators while continuing operations.
 Return the video file and metadata. Formats, audio, and retention are to be decided.
 
-## 3. Multi-simulator operation
-
-Target devices explicitly and operate different simulators concurrently.
-Keep each chain bound to one device and identify the device in returned results.
-
-## 4. USB physical devices
+## 3. USB physical devices
 
 Support authorized Android phones through ADB and evaluate WDA/XCUITest for iPhones.
 Android requires USB debugging and host authorization; iPhone requires developer
 setup plus a configured automation runner. Validate screenshots, gestures, input,
 and operation chains separately on each platform.
 
-## 5. Device control
+## 4. Device control
 
 Switch between portrait and landscape, lock/unlock the screen, and query device
 state. Support these actions in operation chains, with platform limitations made

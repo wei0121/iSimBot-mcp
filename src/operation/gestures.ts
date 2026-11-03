@@ -1,3 +1,5 @@
+import { mapScreenshotArguments } from '../image/screenshot-coordinates.js';
+import { validateArguments } from '../mcp/validate-arguments.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 
 export const gesturesTools: ToolDefinition[] = [
@@ -213,19 +215,18 @@ export const gesturesTools: ToolDefinition[] = [
 
 // Keep direct calls and operation-chain calls aligned with the published contract.
 for (const tool of gesturesTools) {
+  for (const [key, rule] of Object.entries(tool.definition.inputSchema.properties || {})) {
+    const bounds = rule as Record<string, unknown>;
+    if (['x', 'y', 'x1', 'y1', 'x2', 'y2'].includes(key)) bounds.minimum = 0;
+    if (key === 'duration') { bounds.minimum = 0.01; bounds.maximum = 5; }
+    if (key === 'distance') { bounds.minimum = 0; bounds.maximum = 10000; }
+    if (key === 'scale') { bounds.minimum = 0.01; bounds.maximum = 100; }
+  }
+  tool.definition.inputSchema.properties!.screenshotId = { type: 'string', description: 'Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching.' };
+  tool.definition.description += ' Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.';
   const execute = tool.execute;
   tool.execute = async (client, args, settings) => {
-    const schema = tool.definition.inputSchema;
-    for (const key of schema.required || []) {
-      if (!(key in args)) throw new Error(`${tool.definition.name}: missing argument ${key}`);
-    }
-    for (const [key, value] of Object.entries(args)) {
-      const rule = schema.properties?.[key] as { type: string; enum?: string[] } | undefined;
-      if (!rule || (rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type)) {
-        throw new Error(`${tool.definition.name}: invalid argument ${key}`);
-      }
-      if (rule.enum && !rule.enum.includes(value as string)) throw new Error(`Invalid ${key}`);
-    }
-    return execute(client, args, settings);
+    validateArguments(tool, args);
+    return execute(client, mapScreenshotArguments(client, args), settings);
   };
 }
