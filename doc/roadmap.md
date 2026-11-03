@@ -3,7 +3,7 @@
 [Back to README](../README.md)
 
 Multi-simulator operation is implemented in source and awaits release.
-See [Usage](usage.md#multiple-devices).
+See [MCP operations](mcp_operation.md#devices).
 
 Planned features below are in priority order. No release dates are assigned.
 

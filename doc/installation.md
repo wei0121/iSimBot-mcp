@@ -2,70 +2,120 @@
 
 [Back to README](../README.md)
 
-Requires Homebrew, Apple Silicon, macOS 15+, and Xcode 26+ with an iOS simulator runtime.
-Node and Python are bundled privately; installing iSimBot does not upgrade your global runtimes.
+Requires Apple Silicon, macOS 15+, and Xcode 26+ with an iOS simulator runtime.
+Both installation methods include private Node and Python runtimes.
 
-## Homebrew
+## Brew install
 
-Install from our [Homebrew tap](https://github.com/wei0121/homebrew-tap):
+Requires Homebrew:
 
 ```bash
 brew install wei0121/tap/isimbot-mcp
+```
+
+## Manual install (local source)
+
+```bash
+git clone https://github.com/wei0121/iSimBot-mcp.git
+cd iSimBot-mcp
+./scripts/local-setup.sh
+```
+
+No global Node, Python or Homebrew is required. The script downloads dependencies
+and builds the project. Keep the checkout available: the local launcher uses it.
+Local runtimes, settings and companion connections are separate from the brew version.
+
+## CLI config
+
+Choose the command for your installation:
+
+**Brew:**
+
+```bash
 isimbot setup
 ```
 
-Choose your MCP client, then restart it.
-
-## Local installation
-
-From an Apple Silicon Mac with macOS 15+ and Xcode 26+, run:
+**Local** — run from the checkout:
 
 ```bash
-./scripts/local-setup.sh
 ./scripts/isimbot-local setup
 ```
 
-No global Node, Python, npm or Homebrew installation is needed. Setup downloads
-checksum-verified runtimes and Python dependencies pinned in the formula template,
-installs JS dependencies from the lockfile, and builds the current checkout.
-Internet access is required on first installation; downloads are cached locally.
+Choose Claude Code or Codex, then restart the client. Setup adds `isimbot` for
+brew or `isimbot-local` for local, preserving other MCP entries.
 
-The launcher uses `.runtime/` for Node, Python, idb, companion, caches and local
-screenshot settings/history. JS dependencies stay in `node_modules`; compiled code
-in `dist`. These directories are ignored by Git. Nothing modifies shell profiles.
-The first command only installs/builds; the second asks before registering
-`isimbot-local` with your chosen MCP client. It preserves the release `isimbot`
-entry. Restart the client and enable the version you want to test.
+## Manual config
 
-After editing source:
+Use these instead of CLI setup. Merge the entry into your existing config and
+restart the client. Replace `/path/to/iSimBot-mcp` with your checkout's absolute path.
 
-```bash
-./scripts/local-npm run build
-./scripts/local-npm test
+### Brew version
+
+**Claude Code** — `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "isimbot": {
+      "type": "stdio",
+      "command": "/opt/homebrew/opt/isimbot-mcp/bin/isimbot",
+      "args": []
+    }
+  }
+}
 ```
 
-Restart the MCP after rebuilding; there is no automatic reload. To check the
-local environment, run `./scripts/isimbot-local doctor`. Re-run setup after
-changing dependencies or moving the checkout. If the checkout moves, also update
-the MCP launcher path; registration refuses to overwrite an existing entry. Keep
-the checkout mounted when using this MCP. Remove `.runtime/` to remove the private environment; client
-registration is separate. Brew installations are unaffected.
+**Codex** — `~/.codex/config.toml`:
 
-## Troubleshooting and removal
-
-Run `isimbot doctor` to check dependencies and registration. If tools still show
-old parameters, restart the client. Setup preserves unrelated MCP entries and
-refuses to overwrite a conflicting `isimbot` entry.
-
-```bash
-brew uninstall isimbot-mcp
+```toml
+[mcp_servers.isimbot]
+command = "/opt/homebrew/opt/isimbot-mcp/bin/isimbot"
+args = []
 ```
 
-Uninstalling leaves client configuration and saved screenshots in place.
+For a different Homebrew prefix, find the command path with
+`echo "$(brew --prefix isimbot-mcp)/bin/isimbot"`.
 
-Local idb uses an installation-specific `/tmp/isbl-<uid>-<hash>` directory for
-companion sockets, connection state and logs. It does not reuse Homebrew's
-`/tmp/idb` companions. Reinstalling from an empty `.runtime` creates a new identity.
-Both installations still control the same simulators: gestures, app state and
-simulator shutdown affect that shared device. Use different devices when running
-local and release sessions at the same time.
+### Local version
+
+**Claude Code** — `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "isimbot-local": {
+      "type": "stdio",
+      "command": "/path/to/iSimBot-mcp/scripts/isimbot-local",
+      "args": []
+    }
+  }
+}
+```
+
+**Codex** — `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.isimbot-local]
+command = "/path/to/iSimBot-mcp/scripts/isimbot-local"
+args = []
+```
+
+If configured, `CODEX_HOME` replaces `~/.codex`; `CLAUDE_CONFIG_DIR` replaces the
+directory containing `.claude.json`.
+
+## Check and maintain
+
+| Task | Brew | Local (from checkout) |
+| --- | --- | --- |
+| Check setup | `isimbot doctor` | `./scripts/isimbot-local doctor` |
+| Update | `brew upgrade wei0121/tap/isimbot-mcp` | Update source, then `./scripts/local-setup.sh` |
+| Rebuild after edits | — | `./scripts/local-npm run build` |
+| Run tests | — | `./scripts/local-npm test` |
+
+Restart the MCP client after updating or rebuilding. If you move the checkout,
+update the local command path in your client config.
+
+Uninstall brew with `brew uninstall isimbot-mcp`. To remove the local environment,
+delete `.runtime/` from the checkout. Client config entries are removed separately.
+
+Continue with [MCP operations](mcp_operation.md).
