@@ -45,3 +45,17 @@ test('CLI handles help, version, removed commands and noninteractive setup', () 
   assert.equal(setup.status, 1);
   assert.match(setup.stderr, /interactive terminal/);
 });
+
+for (const client of ['claude', 'codex']) {
+  test(`${client}: local registration coexists with formal server and preserves conflict protection`, () => {
+    const formal=addServer(client,'','/formal/isimbot',[]);
+    const local=addServer(client,formal,'/repo/scripts/isimbot-local',[],'isimbot-local');
+    const config=client==='claude'?JSON.parse(local):parse(local);
+    const servers=config[client==='claude'?'mcpServers':'mcp_servers'];
+    assert.equal(servers.isimbot.command,'/formal/isimbot');
+    assert.equal(servers['isimbot-local'].command,'/repo/scripts/isimbot-local');
+    assert.equal(addServer(client,local,'/repo/scripts/isimbot-local',[],'isimbot-local'),null);
+    assert.throws(()=>addServer(client,local,'/other',[],'isimbot-local'),/not be overwritten/);
+    assert.throws(()=>addServer(client,formal,'/other',[],'bad.name'),/Invalid MCP server name/);
+  });
+}

@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+source "$(dirname "$0")/local-env.sh"
+require_local_runtime
+cd "$ISIMBOT_PROJECT_ROOT"
+export npm_config_cache="$ISIMBOT_RUNTIME/cache/npm"
+export npm_config_userconfig="$ISIMBOT_RUNTIME/npm-user.conf"
+export npm_config_globalconfig="$ISIMBOT_RUNTIME/npm-global.conf"
+exec "$ISIMBOT_RUNTIME/node/bin/node" "$ISIMBOT_RUNTIME/node/lib/node_modules/npm/bin/npm-cli.js" "$@"

@@ -10,33 +10,17 @@ interface Step {
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-// Existing chainable tools use flat primitive schemas. Validate the whole chain
-// before starting, so a typo late in a chain cannot cause earlier side effects.
-function validateArguments(tool: ToolDefinition, args: Record<string, unknown>): void {
-  const schema = tool.definition.inputSchema;
-  for (const key of schema.required || []) {
-    if (!(key in args)) throw new Error(`${tool.definition.name}: missing argument ${key}`);
-  }
-  for (const [key, value] of Object.entries(args)) {
-    const rule = schema.properties?.[key] as Record<string, unknown> | undefined;
-    if (!rule) throw new Error(`${tool.definition.name}: unknown argument ${key}`);
-    if (rule.type === 'integer' ? !Number.isInteger(value) : rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
-      throw new Error(`${tool.definition.name}: invalid argument ${key}`);
-    }
-    if (typeof value === 'number' && ((typeof rule.minimum === 'number' && value < rule.minimum) || (typeof rule.maximum === 'number' && value > rule.maximum))) throw new Error(`${tool.definition.name}: ${key} must be between ${rule.minimum} and ${rule.maximum}; received ${value}.`);
-    if (Array.isArray(rule.enum) && !rule.enum.includes(value)) throw new Error(`${tool.definition.name}: invalid ${key}`);
-  }
-}
+import { validateArguments } from '../mcp/validate-arguments.js';
 
 export function createOperationChain(
   operations: ToolDefinition[],
   sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
 ): ToolDefinition {
-  const registry = new Map(operations.filter(t => !['setup', 'operation_chain'].includes(t.definition.name)).map(t => [t.definition.name, t]));
+  const registry = new Map(operations.filter(t => !['setup', 'operation_chain', 'connect_device', 'boot_simulator', 'shutdown_simulator', 'list_devices'].includes(t.definition.name)).map(t => [t.definition.name, t]));
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Execute steps sequentially and return all results/images together. Each delay defaults to 0.3 seconds and is measured after the previous step completes. Example: screenshot, tap with delay 0.3, screenshot with delay 0.3. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 screenshots, 30 seconds total delay (including defaults). Screenshot settings and retention still apply.',
+      description: 'Execute steps sequentially and return all results/images together. Each delay defaults to 0.3 seconds and is measured after the previous step completes. Example: screenshot, tap with delay 0.3, screenshot with delay 0.3. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 screenshots, 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle and list tools are not allowed inside chains. Screenshot settings and retention still apply.',
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['steps'],
         properties: {
@@ -83,10 +67,10 @@ export function createOperationChain(
           if (tool.responseType === 'mcp') {
             const response = result as CallToolResult;
             const bytes = response.content.reduce((sum, item) => sum + (item.type === 'image' ? item.data.length : 0), 0);
-            if (imageBytes + bytes > 8_000_000) throw new Error('Chain image payload exceeds 8 MB of Base64. Use a lower scale/maxBytes or fewer screenshots.');
+            if (imageBytes + bytes > 16_000_000) throw new Error('Chain image payload exceeds 16 MB of Base64. Use logical mode, lower maxBytes, or fewer screenshots.');
             imageBytes += bytes;
             content.push({ type: 'text', text: `Step ${index + 1}: ${step.tool}` }, ...response.content);
-            outcomes.push({ step: index + 1, tool: step.tool, success: !response.isError });
+            outcomes.push({ step: index + 1, tool: step.tool, success: !response.isError, ...(response.structuredContent ? { result: response.structuredContent } : {}) });
             if (response.isError) { failed = true; break; }
           } else {
             outcomes.push({ step: index + 1, tool: step.tool, success: true, result });
@@ -97,10 +81,15 @@ export function createOperationChain(
           break;
         }
       }
+      const summary = {
+        success: !failed, steps: outcomes, skippedSteps: steps.length - outcomes.length,
+        ...(failed ? { note: 'Stopped after failure. Earlier operations may have changed the app; nothing was rolled back.' } : {}),
+      };
       return {
+        structuredContent: summary,
         ...(failed ? { isError: true } : {}),
         content: [{ type: 'text', text: JSON.stringify({
-          success: !failed, steps: outcomes, skippedSteps: steps.length - outcomes.length,
+          success: !failed, steps: outcomes.map(({ result, ...step }) => step.tool === 'screenshot' ? step : { ...step, ...(result !== undefined ? { result } : {}) }), skippedSteps: steps.length - outcomes.length,
           ...(failed ? { note: 'Stopped after failure. Earlier operations may have changed the app; nothing was rolled back.' } : {}),
         }, null, 2) }, ...content],
       };

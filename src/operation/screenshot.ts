@@ -1,3 +1,4 @@
+import { registerScreenshot } from '../image/screenshot-coordinates.js';
 import type { IDBClient } from './idb-client.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 import { historyDirectory, settingsSchema, validateSettings, type ScreenshotSettingsStore, type ScreenshotSettings } from '../setting/screenshot-settings.js';
@@ -9,7 +10,8 @@ export async function captureScreenshot(client: IDBClient, settings: ScreenshotS
   if (outputPath !== undefined) {
     if (typeof outputPath !== 'string' || !outputPath.trim()) throw new Error('path must be a non-empty string');
     const path = await client.screenshot(outputPath);
-    return screenshotResult(path, configuration);
+    const geometry = client.getScreenshotGeometry?.(path);
+    return registerScreenshot(client, await screenshotResult(path, configuration, geometry, client.getConnectedDevice?.()), geometry);
   }
   const dir = historyDirectory(settings);
   const capture = beginScreenshot(dir);
@@ -17,14 +19,11 @@ export async function captureScreenshot(client: IDBClient, settings: ScreenshotS
   try {
     await client.screenshot(pending);
     // Finish reading the image before exposing it to cleanup by other calls.
-    const result = await screenshotResult(pending, configuration);
-    const path = capture.commit();
-    const deleted = pruneScreenshots(dir, settings.read().maxSavedImages);
-    const text = result.content[0];
-    if (text.type === 'text') {
-      text.text = JSON.stringify({ ...JSON.parse(text.text), path, managed: true, deletedOldImages: deleted }, null, 2);
-    }
-    return result;
+    const geometry = client.getScreenshotGeometry?.(pending);
+    const result = await screenshotResult(pending, configuration, geometry, client.getConnectedDevice?.());
+    capture.commit();
+    pruneScreenshots(dir, settings.read().maxSavedImages);
+    return registerScreenshot(client, result, geometry);
   } finally { capture.discard(); }
 }
 
@@ -32,11 +31,11 @@ export const screenshotTools: ToolDefinition[] = [
   {
     definition: {
       name: 'screenshot',
-      description: 'Return screenshot image data and metadata. Optional scale, format, quality and maxBytes override saved settings for this call only (also in operation_chain); no persistent settings change. Defaults: scale 0.6, PNG, maxBytes 2000000. The path points to the unmodified original PNG.',
+      description: 'Return images in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]} in the same order as image blocks. screenSize is in points; imageSize in pixels; deviceInfo.scale is native screen pixels per point, identical in logical and pixel modes. Pass screenshotId with image-pixel coordinates to gestures for automatic conversion; no manual math. An ID is returned only when mapping is available. IDs last 5 minutes, newest 20 per device per server session. Recapture after rotation or navigation; references are bound to their device. Optional mode, format, quality and maxBytes override saved settings for this call only (also in operation_chain); no persistent settings change. Default mode logical: image pixels equal touch points; pixel returns native dimensions; both returns logical then pixel from one capture. screenSize and scale are null if unavailable. Default PNG, maxBytes 5000000 per image.',
       inputSchema: {
         type: 'object', additionalProperties: false,
         properties: {
-          scale: settingsSchema.scale,
+          mode: settingsSchema.mode,
           format: settingsSchema.format,
           quality: settingsSchema.quality,
           maxBytes: settingsSchema.maxBytes,
@@ -51,8 +50,8 @@ export const screenshotTools: ToolDefinition[] = [
     responseType: 'mcp',
     async execute(idbClient, args, settings) {
       const { path, ...overrides } = args;
-      const unknown = Object.keys(overrides).find(key => !['scale', 'format', 'quality', 'maxBytes'].includes(key));
-      if (unknown) throw new Error(`Unknown screenshot argument: ${unknown}. Use path, scale, format, quality or maxBytes. Use setup for persistent retention settings.`);
+      const unknown = Object.keys(overrides).find(key => !['mode', 'format', 'quality', 'maxBytes'].includes(key));
+      if (unknown) throw new Error(`Unknown screenshot argument: ${unknown}. Use path, mode, format, quality or maxBytes. Use setup for persistent retention settings.`);
       return captureScreenshot(idbClient, settings, path as string | undefined, validateSettings(overrides));
     },
   },

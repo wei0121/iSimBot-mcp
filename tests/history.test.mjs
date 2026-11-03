@@ -48,9 +48,9 @@ test('captures return images before retention, clean failures, and preserve expl
   store.update({ maxSavedImages: 2 });
   const source = join(join(store.path, '..'), 'source.png');
   await sharp({ create: { width: 50, height: 100, channels: 3, background: 'white' } }).png().toFile(source);
-  const fake = { screenshot: async path => { copyFileSync(source, path); return path; } };
+  const fake = { getScreenshotGeometry: () => ({udid:'device',scale:2}), screenshot: async path => { copyFileSync(source, path); return path; } };
   const results = await Promise.all(Array.from({ length: 4 }, () => captureScreenshot(fake, store)));
-  for (const result of results) assert.equal(result.content[1].type, 'image');
+  for (const result of results) assert.equal(result.content[0].type, 'image');
   assert.equal(readdirSync(historyDirectory(store)).length, 2);
   const explicit = join(join(store.path, '..'), 'user-output.png');
   await captureScreenshot(fake, store, explicit);

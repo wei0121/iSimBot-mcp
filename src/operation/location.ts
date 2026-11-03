@@ -8,11 +8,11 @@ export const locationTools: ToolDefinition[] = [
       inputSchema: {
         type: 'object',
         properties: {
-          latitude: {
+          latitude: { minimum: -90, maximum: 90,
             type: 'number',
             description: 'Latitude',
           },
-          longitude: {
+          longitude: { minimum: -180, maximum: 180,
             type: 'number',
             description: 'Longitude',
           },

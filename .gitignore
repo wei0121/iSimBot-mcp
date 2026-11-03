@@ -45,3 +45,6 @@ homebrew/isimbot-mcp.rb
 *.tgz
 *.tar.gz
 *~
+
+# Project-private runtimes, caches, settings and screenshots
+.runtime/

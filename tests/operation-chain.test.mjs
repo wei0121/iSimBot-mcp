@@ -68,17 +68,16 @@ test('failure stops subsequent steps and retains earlier images and outcomes', a
 });
 test('operation_chain is callable over MCP and shares the device client', async () => {
   const calls = [];
-  const server = createServer({ connect: async id => calls.push(id), tap: async (x, y) => calls.push([x, y]) });
+  const server = createServer({ getConnectedDevice: () => 'device', tap: async (x, y) => calls.push([x, y]) });
   const client = new Client({ name: 'test', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair();
   try {
     await server.connect(a); await client.connect(b);
     const result = await client.callTool({ name: 'operation_chain', arguments: { steps: [
-      { tool: 'connect_device', arguments: { udid: 'device' } },
       { tool: 'tap', arguments: { x: 10, y: 20 } },
     ] } });
     assert.equal(JSON.parse(result.content[0].text).success, true);
-    assert.deepEqual(calls, ['device', [10, 20]]);
+    assert.deepEqual(calls, [[10, 20]]);
   } finally { await client.close(); await server.close(); }
 });
 

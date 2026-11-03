@@ -18,19 +18,38 @@ Choose your MCP client, then restart it.
 
 ## Local installation
 
-From the repository, with Node.js 20.9+ and npm installed:
+From an Apple Silicon Mac with macOS 15+ and Xcode 26+, run:
 
 ```bash
-npm ci
-npm run brew:prepare
-brew tap-new local/isimbot # Skip if this tap already exists.
-cp homebrew/isimbot-mcp.rb "$(brew --repository local/isimbot)/Formula/isimbot-mcp.rb"
-brew install local/isimbot/isimbot-mcp
-isimbot setup
+./scripts/local-setup.sh
+./scripts/isimbot-local setup
 ```
 
-After source changes or moving the checkout, regenerate and copy the formula,
-then run `brew reinstall local/isimbot/isimbot-mcp`. Restart your MCP client.
+No global Node, Python, npm or Homebrew installation is needed. Setup downloads
+checksum-verified runtimes and Python dependencies pinned in the formula template,
+installs JS dependencies from the lockfile, and builds the current checkout.
+Internet access is required on first installation; downloads are cached locally.
+
+The launcher uses `.runtime/` for Node, Python, idb, companion, caches and local
+screenshot settings/history. JS dependencies stay in `node_modules`; compiled code
+in `dist`. These directories are ignored by Git. Nothing modifies shell profiles.
+The first command only installs/builds; the second asks before registering
+`isimbot-local` with your chosen MCP client. It preserves the release `isimbot`
+entry. Restart the client and enable the version you want to test.
+
+After editing source:
+
+```bash
+./scripts/local-npm run build
+./scripts/local-npm test
+```
+
+Restart the MCP after rebuilding; there is no automatic reload. To check the
+local environment, run `./scripts/isimbot-local doctor`. Re-run setup after
+changing dependencies or moving the checkout. If the checkout moves, also update
+the MCP launcher path; registration refuses to overwrite an existing entry. Keep
+the checkout mounted when using this MCP. Remove `.runtime/` to remove the private environment; client
+registration is separate. Brew installations are unaffected.
 
 ## Troubleshooting and removal
 

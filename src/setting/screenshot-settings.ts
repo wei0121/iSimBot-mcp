@@ -4,32 +4,32 @@ import { join, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export interface ScreenshotSettings {
-  scale: number;
+  mode: 'logical' | 'pixel' | 'both';
   format: 'png' | 'jpeg';
   quality: number;
   maxBytes: number;
   maxSavedImages: number;
 }
 export const defaults: ScreenshotSettings = {
-  scale: 0.6, format: 'png', quality: 80, maxBytes: 2_000_000, maxSavedImages: 200,
+  mode: 'logical', format: 'png', quality: 80, maxBytes: 5_000_000, maxSavedImages: 200,
 };
 export const settingsSchema = {
   maxSavedImages: { type: 'integer', minimum: 1, maximum: 10000, description: 'Maximum automatically saved screenshots, default 200. Updating this value immediately deletes oldest managed screenshots over the limit. Explicit output paths are excluded.' },
-  scale: { type: 'number', minimum: 0.1, maximum: 4, default: 0.6, description: 'Default 0.6. Multiplier of original screenshot pixel dimensions: 1 = native, 2 = double, 0.5 = half, 0.2 = one fifth. Preserves aspect ratio, rounded to whole pixels.' },
+  mode: { type: 'string', enum: ['logical', 'pixel', 'both'], default: 'logical', description: 'logical: one image pixel per touch point (default); pixel: native pixels; both: logical then pixel from one capture.' },
   format: { type: 'string', enum: ['png', 'jpeg'], description: 'PNG (default) preserves UI text without lossy compression. JPEG can save bandwidth.' },
   quality: { type: 'integer', minimum: 40, maximum: 100, description: 'JPEG quality only; ignored for PNG.' },
-  maxBytes: { type: 'integer', minimum: 10_000, maximum: 5_000_000, default: 2_000_000, description: 'Default 2000000 (2 MB). Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested scale cannot fit; never silently resizes.' },
+  maxBytes: { type: 'integer', minimum: 10_000, maximum: 5_000_000, default: 5_000_000, description: 'Default 5000000 (5 MB) per image. Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested dimensions cannot fit; never silently resizes.' },
 };
 export function validateSettings(value: unknown): Partial<ScreenshotSettings> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Screenshot settings must be an object.');
   for (const [key, val] of Object.entries(value)) {
-    if (key === 'scale') {
-      if (typeof val !== 'number' || !Number.isFinite(val) || val < 0.1 || val > 4) throw new Error('scale must be between 0.1 and 4');
+    if (key === 'mode') {
+      if (!['logical', 'pixel', 'both'].includes(val as string)) throw new Error('mode must be logical, pixel or both');
     } else if (key === 'format') {
       if (val !== 'png' && val !== 'jpeg') throw new Error('format must be png or jpeg');
     } else {
       const bounds = { maxSavedImages: [1, 10000], quality: [40, 100], maxBytes: [10_000, 5_000_000] }[key];
-      if (!bounds || typeof val !== 'number' || !Number.isInteger(val) || val < bounds[0] || val > bounds[1]) throw new Error(bounds ? `Invalid screenshot setting: ${key}=${JSON.stringify(val)}. Expected an integer between ${bounds[0]} and ${bounds[1]}${key === 'maxBytes' ? ' bytes (2 MB = 2000000)' : ''}. Retry with a value in this range; settings were not changed.` : `Unknown screenshot setting: ${key}. Allowed fields: scale, format, quality, maxBytes, maxSavedImages.`);
+      if (!bounds || typeof val !== 'number' || !Number.isInteger(val) || val < bounds[0] || val > bounds[1]) throw new Error(bounds ? `Invalid screenshot setting: ${key}=${JSON.stringify(val)}. Expected an integer between ${bounds[0]} and ${bounds[1]}${key === 'maxBytes' ? ' bytes (2 MB = 2000000)' : ''}. Retry with a value in this range; settings were not changed.` : `Unknown screenshot setting: ${key}. Allowed fields: mode, format, quality, maxBytes, maxSavedImages.`);
     }
   }
   return value;
@@ -40,7 +40,13 @@ export class ScreenshotSettingsStore {
     let text: string;
     try { text = readFileSync(this.path, 'utf8'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { ...defaults }; throw error; }
-    return { ...defaults, ...validateSettings(JSON.parse(text)) };
+    const saved = JSON.parse(text);
+    // Migrate legacy scale settings in memory; do not write on read.
+    if (saved && typeof saved === 'object' && !Array.isArray(saved) && 'scale' in saved) {
+      delete saved.scale;
+      if (saved.maxBytes === 2_000_000) delete saved.maxBytes;
+    }
+    return { ...defaults, ...validateSettings(saved) };
   }
   update(patch: unknown): ScreenshotSettings {
     const changes = validateSettings(patch);

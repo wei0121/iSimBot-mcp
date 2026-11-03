@@ -24,7 +24,7 @@ export const inspectionTools: ToolDefinition[] = [
         type: 'object',
         properties: {
           lines: {
-            type: 'number',
+            type: 'integer', minimum: 1, maximum: 10000,
             description: 'Number of lines to retrieve (default: 100)',
           },
         },
