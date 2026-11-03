@@ -1,54 +1,62 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [closed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.pull_request.head.ref }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24.22.2'
           cache: npm
+      - name: Validate release PR
+        id: release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {releaseContext} = require('./.github/scripts/release.cjs');
+            const release = releaseContext(context.payload, process.env.GITHUB_REPOSITORY);
+            for (const [key, value] of Object.entries(release)) core.setOutput(key, value);
       - name: Check release version
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: node scripts/prepare-release.mjs --check
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm test
       - name: Build release assets
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: node scripts/prepare-release.mjs
-      - name: Publish release
+      - name: Create tag and publish release
+        uses: actions/github-script@v7
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="$GITHUB_REF_NAME"
-          version="${tag#v}"
-          # Upload everything to a draft before making the release public.
-          # Existing releases are never overwritten automatically.
-          gh release create "$tag" \
-            "homebrew/local/isimbot-mcp-${version}.tar.gz" \
-            homebrew/local/SHA256SUMS \
-            homebrew/local/isimbot-mcp.rb \
-            --verify-tag --draft --title "iSimBot-MCP ${version}" \
-            --notes-file homebrew/local/release-notes.md
-          gh release edit "$tag" --draft=false
+        with:
+          script: |
+            const automation = require('./.github/scripts/release.cjs');
+            const release = automation.releaseContext(context.payload, process.env.GITHUB_REPOSITORY);
+            const url = await automation.publish(github, release, 'homebrew/local');
+            await core.summary.addLink('Published release', url)
+              .addRaw('\n\nNext: copy the published isimbot-mcp.rb asset into homebrew-tap/Formula/isimbot-mcp.rb and merge a tap PR using your existing Git credentials.\n').write();

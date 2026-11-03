@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
-const tag = process.env.GITHUB_REF_NAME;
+const tag = process.env.RELEASE_TAG || process.env.GITHUB_REF_NAME;
 if (!/^v\d+\.\d+\.\d+$/.test(tag || '') || tag !== `v${pkg.version}`) {
   throw new Error(`Tag must match package version v${pkg.version}; received ${tag || '(none)'}`);
 }
@@ -16,6 +16,12 @@ if (lock.version !== pkg.version || lock.packages[''].version !== pkg.version) {
 }
 const repository = process.env.GITHUB_REPOSITORY || 'wei0121/iSimBot-mcp';
 if (repository !== 'wei0121/iSimBot-mcp') throw new Error('Unexpected release repository');
+const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
+const heading = `## ${pkg.version}\n`;
+const start = changelog.indexOf(heading);
+if (start < 0) throw new Error(`Missing changelog entry for ${pkg.version}`);
+const section = changelog.slice(start + heading.length).split('\n## ')[0].trim();
+if (!section) throw new Error(`Empty changelog entry for ${pkg.version}`);
 if (process.argv.includes('--check')) {
   console.log(`Release version verified: ${tag}`);
 } else {
@@ -30,11 +36,6 @@ if (process.argv.includes('--check')) {
     .replace('@ARCHIVE_URL@', url).replace('@VERSION@', pkg.version).replace('@SHA256@', sha);
   writeFileSync(join(output, 'isimbot-mcp.rb'), formula);
   writeFileSync(join(output, 'SHA256SUMS'), `${sha}  ${archiveName}\n`);
-  const changelog = readFileSync(join(root, 'CHANGELOG.md'), 'utf8');
-  const heading = `## ${pkg.version}\n`;
-  const start = changelog.indexOf(heading);
-  if (start < 0) throw new Error(`Missing changelog entry for ${pkg.version}`);
-  const section = changelog.slice(start + heading.length).split('\n## ')[0].trim();
   writeFileSync(join(output, 'release-notes.md'), `${section}\n\nSHA256: \`${sha}\`\n`);
   console.log(`Release assets ready for ${tag}. Copy the published isimbot-mcp.rb asset to the tap after publication.`);
 }
