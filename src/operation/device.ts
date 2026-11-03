@@ -1,3 +1,4 @@
+import { stopClientRecording } from './recording.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 
 export const deviceTools: ToolDefinition[] = [
@@ -51,8 +52,9 @@ export const deviceTools: ToolDefinition[] = [
       },
     },
     async execute(idbClient, args) {
+      const recording = await stopClientRecording(idbClient, 'device_shutdown');
       await idbClient.shutdownSimulator(args.udid as string);
-      return { success: true, message: `Simulator ${args.udid} shut down` };
+      return { success: true, message: `Simulator ${args.udid} shut down`, ...(recording ? { recording } : {}) };
     },
   },
 ];

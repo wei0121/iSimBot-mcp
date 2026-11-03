@@ -16,8 +16,9 @@ App builds and AVD creation are outside the initial scope.
 
 ## 2. Screen recording
 
-Start and stop recordings on iOS and Android simulators while continuing operations.
-Return the video file and metadata. Formats, audio, and retention are to be decided.
+iOS simulator recording is implemented in source and awaits release: background
+H.264 MP4 capture, auto-stop, status and operation-chain support.
+Android recording, audio and retention settings remain planned.
 
 ## 3. USB physical devices
 

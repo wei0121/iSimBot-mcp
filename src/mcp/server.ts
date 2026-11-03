@@ -28,7 +28,8 @@ export function createServer(client = new IDBClient(), settings = new Screenshot
       if (!tool) throw new Error(`Unknown tool: ${name}`);
       const result = await devices.execute(tool, args || {}, settings);
       if (tool.responseType === 'mcp') return result as CallToolResult;
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        ...(result && typeof result === 'object' && 'success' in result && result.success === false ? { isError: true } : {}) };
     } catch (error) {
       return {
         content: [{ type: 'text', text: JSON.stringify(errorResult(error), null, 2) }],
@@ -36,10 +37,17 @@ export function createServer(client = new IDBClient(), settings = new Screenshot
       };
     }
   });
+  const close = server.close.bind(server);
+  server.close = async () => { await devices.close(); await close(); };
+  server.onclose = () => { void devices.close(); };
   return server;
 }
 
 export async function startServer(): Promise<void> {
-  await createServer().connect(new StdioServerTransport());
+  const server = createServer();
+  const shutdown = () => { void server.close().finally(() => process.exit(0)); };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  await server.connect(new StdioServerTransport());
   console.error('iSimBot-MCP server running on stdio');
 }

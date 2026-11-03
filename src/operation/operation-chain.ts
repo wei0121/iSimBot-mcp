@@ -1,3 +1,4 @@
+import { currentRecording } from './recording.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { errorResult } from '../mcp/tool-error.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
@@ -20,7 +21,7 @@ export function createOperationChain(
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Execute steps sequentially and return all results/images together. Optional delay is the wait after the previous operation completes, before the current operation. Default: 0.3 seconds; 0 means no delay. To inspect animations, follow an action with consecutive screenshot steps using delay: 0.1; screenshot processing time is additional. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle tools and list_devices are not allowed inside chains. Screenshot settings and retention still apply.',
+      description: 'Execute steps sequentially and return all results/images together. Optional delay is the wait after the previous operation completes, before the current operation. Default: 0.3 seconds; 0 means no delay. To inspect animations, follow an action with consecutive screenshot steps using delay: 0.1; screenshot processing time is additional. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle tools and list_devices are not allowed inside chains. Screenshot settings and retention still apply. Recording tools are allowed; on failure, a recording started by this chain is stopped and its result is returned in recordingCleanup. Existing recordings are not stopped automatically.',
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['steps'],
         properties: {
@@ -55,6 +56,8 @@ export function createOperationChain(
       if (steps.filter(step => ['screenshot', 'capture'].includes(String(step.tool))).length > 6) throw new Error('At most 6 screenshot/capture calls combined per chain.');
       const outcomes: Record<string, unknown>[] = [];
       const content: CallToolResult['content'] = [];
+      let ownedRecording: ReturnType<typeof currentRecording>;
+      let recordingCleanup: unknown;
       let imageBytes = 0;
       let failed = false;
       for (const [index, step] of steps.entries()) {
@@ -64,6 +67,7 @@ export function createOperationChain(
           // relative interval, even when earlier operations were slow.
           if (step.delay) await sleep(step.delay * 1000);
           const result = await tool.execute(client, step.arguments, settings);
+          if (step.tool === 'start_recording' && isObject(result) && result.success === true) ownedRecording = currentRecording(client);
           if (tool.responseType === 'mcp') {
             const response = result as CallToolResult;
             const bytes = response.content.reduce((sum, item) => sum + (item.type === 'image' ? item.data.length : 0), 0);
@@ -73,7 +77,9 @@ export function createOperationChain(
             outcomes.push({ step: index + 1, tool: step.tool, success: !response.isError, ...(response.structuredContent ? { result: response.structuredContent } : {}) });
             if (response.isError) { failed = true; break; }
           } else {
-            outcomes.push({ step: index + 1, tool: step.tool, success: true, result });
+            const success = !isObject(result) || result.success !== false;
+            outcomes.push({ step: index + 1, tool: step.tool, success, result });
+            if (!success) { failed = true; break; }
           }
         } catch (error) {
           outcomes.push({ step: index + 1, tool: step.tool, ...errorResult(error) });
@@ -81,7 +87,9 @@ export function createOperationChain(
           break;
         }
       }
+      if (failed && ownedRecording?.active) recordingCleanup = await ownedRecording.stop('chain_failed');
       const summary = {
+        ...(recordingCleanup ? { recordingCleanup } : {}),
         success: !failed, steps: outcomes, skippedSteps: steps.length - outcomes.length,
         ...(failed ? { note: 'Stopped after failure. Earlier operations may have changed the app; nothing was rolled back.' } : {}),
       };
@@ -89,6 +97,7 @@ export function createOperationChain(
         structuredContent: summary,
         ...(failed ? { isError: true } : {}),
         content: [{ type: 'text', text: JSON.stringify({
+          ...(recordingCleanup ? { recordingCleanup } : {}),
           success: !failed, steps: outcomes.map(({ result, ...step }) => ['screenshot', 'capture'].includes(String(step.tool)) ? step : { ...step, ...(result !== undefined ? { result } : {}) }), skippedSteps: steps.length - outcomes.length,
           ...(failed ? { note: 'Stopped after failure. Earlier operations may have changed the app; nothing was rolled back.' } : {}),
         }, null, 2) }, ...content],

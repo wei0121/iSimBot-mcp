@@ -13,11 +13,11 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 24);
-    for (const name of ['open_url', 'list_apps']) {
+    assert.equal(listed.length, 27);
+    for (const name of ['open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status']) {
       assert.equal(listed.find(t => t.name === name).inputSchema.properties.deviceId.type, 'string');
     }
-    assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
+    assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
   } finally { await client.close(); }
 });
 
