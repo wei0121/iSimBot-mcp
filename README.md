@@ -6,44 +6,62 @@ Tap, swipe, type, capture and more — through Claude Code, Codex, or any MCP cl
 
 ![iSimBot-MCP demo](doc/iSImBotDemo.gif)
 
-## Quick Start
+## Installation
 
 Requires Homebrew, Apple Silicon, macOS 15+, and Xcode 26+ with an iOS simulator runtime.
 
 ```bash
 brew install wei0121/tap/isimbot-mcp
+```
+
+[Installation details](doc/installation.md)
+
+## Usage
+
+```bash
 isimbot setup
 ```
 
-Choose **Claude Code** or **Codex**, then restart the client. Try:
+Choose **Claude Code** or **Codex**, then restart the client.
+Check dependencies and registration with:
 
-> List my simulators, connect to iPhone 17, and take a screenshot.
+```bash
+isimbot doctor
+```
 
-- [Installation](doc/installation.md)
+### Manual configuration
 
-- [Usage](doc/usage.md)
+**Claude Code** — add to `~/.claude.json`:
 
-- [Roadmap](doc/roadmap.md)
+```json
+{
+  "mcpServers": {
+    "isimbot": {
+      "type": "stdio",
+      "command": "/opt/homebrew/opt/isimbot-mcp/bin/isimbot",
+      "args": []
+    }
+  }
+}
+```
 
-- [Contribute](doc/contribute.md)
+**Codex** — add to `~/.codex/config.toml`:
 
-## Source Code
+```toml
+[mcp_servers.isimbot]
+command = "/opt/homebrew/opt/isimbot-mcp/bin/isimbot"
+args = []
+```
 
-This repository contains the full TypeScript implementation of the MCP server.
-Homebrew is only the distribution method.
+Keep existing MCP entries and restart the client.
+
+## Document
+
+[MCP operations](doc/mcp_operation.md) · [Roadmap](doc/roadmap.md) · [Contribute](doc/contribute.md)
 
 - [Server entry point](src/index.ts)
 - [MCP server and request handlers](src/mcp/server.ts)
 - [Tool registry](src/mcp/registry.ts)
 - [Simulator operations](src/operation/)
-
-Build from source with Node.js 20.9+:
-
-```bash
-npm ci
-npm run build
-```
-
-Actual simulator operations require macOS, Xcode, and IDB.
 
 MIT — see [LICENSE](LICENSE).
