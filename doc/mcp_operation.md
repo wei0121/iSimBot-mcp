@@ -25,6 +25,8 @@ device run sequentially; different devices can run concurrently.
 
 | Operation | Description |
 | --- | --- |
+| `list_apps` | List installed apps with bundle ID, name, install type and process state. |
+| `open_url` | Open a URL or App deep link on the selected device; inspect the destination with `capture`. |
 | `install_app` | Install a simulator `.app` from a local path. |
 | `launch_app` | Launch or foreground an app by bundle ID. |
 | `terminate_app` | Stop an app by bundle ID. |

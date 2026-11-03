@@ -16,6 +16,10 @@ export function validateArguments(tool: ToolDefinition, args: Record<string, unk
     if (typeof value === 'number' && ((typeof rule.minimum === 'number' && value < rule.minimum) || (typeof rule.maximum === 'number' && value > rule.maximum))) throw new Error(`${tool.definition.name}: ${key} must be between ${rule.minimum} and ${rule.maximum}; received ${value}.`);
     if (typeof value === 'string' && (value.includes('\0') || (key !== 'text' && !value.trim()))) throw new Error(`${tool.definition.name}: invalid argument ${key}`);
     if (['udid', 'bundleId'].includes(key) && typeof value === 'string' && value.startsWith('-')) throw new Error(`${tool.definition.name}: invalid argument ${key}`);
+    if (rule.format === 'uri' && typeof value === 'string') {
+      if (/[\s\x00-\x1f\x7f]/.test(value)) throw new Error(`${tool.definition.name}: ${key} must be an absolute URL; encode spaces and control characters.`);
+      try { new URL(value); } catch { throw new Error(`${tool.definition.name}: ${key} must be an absolute URL with a scheme.`); }
+    }
     if (Array.isArray(rule.enum) && !rule.enum.includes(value)) throw new Error(`${tool.definition.name}: invalid ${key}`);
   }
 }

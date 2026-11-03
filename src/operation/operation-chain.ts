@@ -20,7 +20,7 @@ export function createOperationChain(
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Execute steps sequentially and return all results/images together. Optional delay is the wait after the previous operation completes, before the current operation. Default: 0.3 seconds; 0 means no delay. To inspect animations, follow an action with consecutive screenshot steps using delay: 0.1; screenshot processing time is additional. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle and list tools are not allowed inside chains. Screenshot settings and retention still apply.',
+      description: 'Execute steps sequentially and return all results/images together. Optional delay is the wait after the previous operation completes, before the current operation. Default: 0.3 seconds; 0 means no delay. To inspect animations, follow an action with consecutive screenshot steps using delay: 0.1; screenshot processing time is additional. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle tools and list_devices are not allowed inside chains. Screenshot settings and retention still apply.',
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['steps'],
         properties: {

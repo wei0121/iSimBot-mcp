@@ -1,9 +1,55 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IDBClient } from '../dist/operation/idb-client.js';
+import { tools } from '../dist/mcp/registry.js';
+
+test('app operations target the selected device, preserve literal URLs and parse JSON/NDJSON', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'isimbot-apps-'));
+  const oldPath = process.env.PATH;
+  const log = join(dir, 'args'), output = join(dir, 'output'), marker = join(dir, 'injected');
+  writeFileSync(output, '');
+  writeFileSync(join(dir, 'idb'), `#!${process.execPath}
+import fs from 'node:fs';
+fs.writeFileSync(${JSON.stringify(log)}, JSON.stringify(process.argv.slice(2)));
+process.stdout.write(fs.readFileSync(${JSON.stringify(output)}));
+`, { mode: 0o755 });
+  process.env.PATH = `${dir}:${oldPath}`;
+  t.after(() => { process.env.PATH = oldPath; rmSync(dir, { recursive: true, force: true }); });
+  const client = new IDBClient(); client.udid = 'device-A';
+  const url = `myapp://page?literal=$(touch\u0024{IFS}${marker})&quote=';`;
+  await client.openUrl(url);
+  assert.deepEqual(JSON.parse(readFileSync(log)), ['open', '--udid', 'device-A', '--', url]);
+  assert.equal(existsSync(marker), false);
+  const raw = [{bundle_id:'app.one', name:'中文 App',install_type:'user',process_state:'Running'}, {bundle_id:'app.two'}];
+  const expected = [{bundleId:'app.one',name:'中文 App',installType:'user',processState:'Running'}, {bundleId:'app.two',name:null,installType:null,processState:null}];
+  for (const text of [JSON.stringify(raw), raw.map(x => JSON.stringify(x)).join('\n')]) {
+    writeFileSync(output, text);
+    assert.deepEqual(await client.listApps(), expected);
+    assert.deepEqual(JSON.parse(readFileSync(log)), ['list-apps','--udid','device-A','--json','--fetch-process-state']);
+  }
+  writeFileSync(output, ''); assert.deepEqual(await client.listApps(), []);
+  for (const invalid of ['[{}]', '{"bundle_id":null}', 'not json']) {
+    writeFileSync(output, invalid); await assert.rejects(client.listApps());
+  }
+  for (const invalid of ['--help', 'example.com', 'https://example.com/a b', 'https://x/\n']) {
+    await assert.rejects(client.openUrl(invalid));
+  }
+});
+
+test('new app tools work in chains and invalid URLs fail preflight before earlier actions', async () => {
+  const chain = tools.find(t => t.definition.name === 'operation_chain');
+  const calls = [];
+  const fake = { listApps: async () => { calls.push('list'); return [{bundleId:'app.one'}]; }, openUrl: async url => calls.push(url) };
+  const result = await chain.execute(fake, {steps:[{tool:'list_apps',delay:0},{tool:'open_url',arguments:{url:'myapp://page'},delay:0}]}, {});
+  assert.ok(!result.isError);
+  assert.deepEqual(calls, ['list','myapp://page']);
+  calls.length = 0;
+  await assert.rejects(chain.execute(fake, {steps:[{tool:'list_apps',delay:0},{tool:'open_url',arguments:{url:'missing-scheme'},delay:0}]}, {}));
+  assert.deepEqual(calls, []);
+});
 
 test('launch passes selected UDID before bundle ID and never interprets shell syntax', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'isimbot-launch-'));

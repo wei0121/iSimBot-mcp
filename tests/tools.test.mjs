@@ -13,12 +13,15 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 22);
-    assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'capture', 'operation_chain'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
+    assert.equal(listed.length, 24);
+    for (const name of ['open_url', 'list_apps']) {
+      assert.equal(listed.find(t => t.name === name).inputSchema.properties.deviceId.type, 'string');
+    }
+    assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
   } finally { await client.close(); }
 });
 
-test('MCP dispatch reaches all 18 non-image handlers with shared client and retains errors', async () => {
+test('MCP dispatch reaches all 20 non-image handlers with shared client and retains errors', async () => {
   const calls = [];
   const fake = new Proxy({}, { get: (_, method) => method === 'getConnectedDevice' ? () => 'device' : async (...args) => {
     calls.push([method, args]);
@@ -42,6 +45,8 @@ test('MCP dispatch reaches all 18 non-image handlers with shared client and reta
       ['pinch', { x: 200, y: 400 }, 'pinch', [200, 400, 2, 0.5, 100]],
       ['press_button', { button: 'home' }, 'pressButton', ['home']],
       ['type_text', { text: 'hello' }, 'typeText', ['hello']],
+      ['list_apps', {}, 'listApps', []],
+      ['open_url', { url: 'myapp://page' }, 'openUrl', ['myapp://page']],
       ['install_app', { appPath: '/app' }, 'installApp', ['/app']],
       ...['launch', 'terminate', 'uninstall'].map(verb => [`${verb}_app`, { bundleId: 'app.id' }, `${verb}App`, ['app.id']]),
       
@@ -58,7 +63,7 @@ test('MCP dispatch reaches all 18 non-image handlers with shared client and reta
       if (name === 'list_devices') assert.deepEqual(value, []);
       else assert.equal(value.success, true, name);
     }
-    assert.equal(calls.length, 18);
+    assert.equal(calls.length, 20);
     for (const [name, args, message] of [['missing', {}, 'Unknown tool: missing'], ['connect_device', { udid: 'fail' }, 'Unknown tool: connect_device']]) {
       const result = await client.callTool({ name, arguments: args });
       assert.equal(result.isError, true);
