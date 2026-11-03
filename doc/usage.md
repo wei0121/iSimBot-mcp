@@ -55,6 +55,7 @@ Optional parameters show their defaults. Durations and delays are in seconds.
 | `tap`, `double_tap` | `x`, `y` | — |
 | `long_press` | `x`, `y` | `duration: 1` |
 | `swipe` | `x1`, `y1`, `x2`, `y2` | `duration: 0.5` |
+| `pinch` | `x`, `y` | `scale: 2`, `duration: 0.5`, `radius: 100` |
 | `scroll` | `x1`, `y1`, `direction` | `distance: 200` |
 | `press_button` | `button`: `home`, `lock`, `volumeUp`, `volumeDown` | — |
 | `type_text` | `text` | — |
@@ -67,7 +68,7 @@ Optional parameters show their defaults. Durations and delays are in seconds.
 
 `scroll.direction` is finger movement: `up`, `down`, `left`, or `right`.
 Pass the `screenshotId` returned by `screenshot` to any coordinate gesture
-(`tap`, `double_tap`, `long_press`, `swipe`, `scroll`). Coordinates then
+(`tap`, `double_tap`, `long_press`, `swipe`, `scroll`, `pinch`). Coordinates then
 use pixels of that returned image; MCP converts them to simulator points:
 
 ```json
@@ -75,7 +76,8 @@ use pixels of that returned image; MCP converts them to simulator points:
 ```
 
 Without `screenshotId`, gestures continue to use simulator points. With it,
-scroll distance also uses image pixels (default 200); duration is unchanged. Use the returned image size, not a resized chat preview.
+scroll distance and pinch radius also use image pixels (defaults 200 and 100);
+pinch scale is dimensionless and duration remains in seconds. Use the returned image size, not a resized chat preview.
 IDs last 5 minutes, retain the newest 20 per device per server session, and are cleared for that device on
 reconnect or shutdown. Recapture after rotation or navigation: IDs identify coordinate maps,
 not live elements, and do not detect UI changes. Invalid references and coordinates
@@ -167,7 +169,12 @@ and 16 MB total Base64 image data (including both images in `both` mode). Chains
 Set `deviceId` on the chain, not individual steps. Same-device requests wait until
 the chain finishes.
 
-`pinch` is not exposed until true simultaneous multi-touch is available.
+`pinch` uses native simultaneous two-finger input (`idb ui pinch`), supported by
+the pinned idb 1.7.8 runtime. `scale > 1` spreads fingers; `scale < 1` brings them
+together. `radius` is each finger's initial distance from the center. Keep the
+whole gesture on-screen. App zoom limits may prevent visible changes; successful
+input delivery does not guarantee a specific zoom level. Unsupported backends
+return an error; no swipe approximation is used.
 Boot waits for simulator boot completion (up to 120 seconds). App launch waits
 for the target process to report Running (up to 10 seconds), foregrounding an
 already-running app. This does not wait for UI/network

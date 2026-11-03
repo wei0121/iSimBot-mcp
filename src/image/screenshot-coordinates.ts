@@ -54,6 +54,11 @@ export function mapScreenshotArguments(client: IDBClient, args: Record<string, u
     }
     converted[key] = value * (horizontal ? mapping.x : mapping.y);
   }
+  if (args.radius !== undefined) {
+    // logical/pixel captures preserve isotropic screen scale. Radius is a length,
+    // while pinch scale and duration must not be transformed.
+    converted.radius = (args.radius as number) * mapping.x;
+  }
   if (args.direction !== undefined) {
     const horizontal = args.direction === 'left' || args.direction === 'right';
     const distance = (args.distance ?? 200) as number;

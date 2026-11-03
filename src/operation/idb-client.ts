@@ -298,4 +298,19 @@ export class IDBClient {
     }
   }
 
+  async pinch(x: number, y: number, scale = 2, duration = 0.5, radius = 100): Promise<void> {
+    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
+    if (![x, y, scale, duration, radius].every(Number.isFinite) || x < 0 || y < 0 ||
+        scale < 0.01 || scale > 100 || duration < 0.01 || duration > 5 || radius <= 0 || radius > 10000) {
+      throw new Error('Invalid pinch: nonnegative coordinates, scale 0.01–100, duration 0.01–5 seconds, and radius >0–10000 points required.');
+    }
+    try {
+      // Native HIDPinch: simultaneous contacts, never sequential swipes.
+      await run('idb', ['ui', 'pinch', '--udid', this.udid, '--duration', duration,
+        '--radius', radius, '--', x, y, scale], { timeout: 10000 });
+    } catch (error) {
+      throw new Error(`Native pinch failed: ${(error as Error).message}. Requires an idb client/companion with native ui pinch support (project runtime: 1.7.8). No swipe fallback or automatic retry was performed.`);
+    }
+  }
+
 }

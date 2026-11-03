@@ -44,6 +44,5 @@ test('backend passes injection strings literally, sends gestures once, and waits
     ['simctl','bootstatus',attack,'-b'],
   ]);
   assert.equal(existsSync(marker),false);
-  assert.ok(!tools.some(t=>t.definition.name==='pinch'));
-  assert.equal(typeof client.pinch,'undefined');
+  assert.ok(tools.some(t=>t.definition.name==='pinch'));
 });

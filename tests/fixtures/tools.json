@@ -39,320 +39,6 @@
     }
   },
   {
-    "name": "tap",
-    "description": "Tap at specific coordinates on the screen Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number",
-          "description": "X coordinate",
-          "minimum": 0
-        },
-        "y": {
-          "type": "number",
-          "description": "Y coordinate",
-          "minimum": 0
-        },
-        "screenshotId": {
-          "type": "string",
-          "description": "Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "x",
-        "y"
-      ]
-    }
-  },
-  {
-    "name": "double_tap",
-    "description": "Double tap at specific coordinates Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number",
-          "description": "X coordinate",
-          "minimum": 0
-        },
-        "y": {
-          "type": "number",
-          "description": "Y coordinate",
-          "minimum": 0
-        },
-        "screenshotId": {
-          "type": "string",
-          "description": "Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "x",
-        "y"
-      ]
-    }
-  },
-  {
-    "name": "long_press",
-    "description": "Long press at specific coordinates Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number",
-          "description": "X coordinate",
-          "minimum": 0
-        },
-        "y": {
-          "type": "number",
-          "description": "Y coordinate",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "description": "Press duration in seconds (default: 1.0)",
-          "default": 1,
-          "minimum": 0.01,
-          "maximum": 5
-        },
-        "screenshotId": {
-          "type": "string",
-          "description": "Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "x",
-        "y"
-      ]
-    }
-  },
-  {
-    "name": "swipe",
-    "description": "Swipe from one point to another Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "x1": {
-          "type": "number",
-          "description": "Start X coordinate",
-          "minimum": 0
-        },
-        "y1": {
-          "type": "number",
-          "description": "Start Y coordinate",
-          "minimum": 0
-        },
-        "x2": {
-          "type": "number",
-          "description": "End X coordinate",
-          "minimum": 0
-        },
-        "y2": {
-          "type": "number",
-          "description": "End Y coordinate",
-          "minimum": 0
-        },
-        "duration": {
-          "type": "number",
-          "description": "Swipe duration in seconds (default: 0.5)",
-          "default": 0.5,
-          "minimum": 0.01,
-          "maximum": 5
-        },
-        "screenshotId": {
-          "type": "string",
-          "description": "Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "x1",
-        "y1",
-        "x2",
-        "y2"
-      ]
-    }
-  },
-  {
-    "name": "scroll",
-    "description": "Scroll by swiping from the supplied start point. Direction describes finger movement, not content movement. Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "x1": {
-          "type": "number",
-          "description": "Start X coordinate",
-          "minimum": 0
-        },
-        "y1": {
-          "type": "number",
-          "description": "Start Y coordinate",
-          "minimum": 0
-        },
-        "direction": {
-          "type": "string",
-          "enum": [
-            "up",
-            "down",
-            "left",
-            "right"
-          ],
-          "description": "Finger movement direction: up decreases Y, down increases Y, left decreases X, right increases X."
-        },
-        "distance": {
-          "type": "number",
-          "description": "Distance in the same coordinate units as x1/y1 (default: 200)",
-          "default": 200,
-          "minimum": 0,
-          "maximum": 10000
-        },
-        "screenshotId": {
-          "type": "string",
-          "description": "Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "x1",
-        "y1",
-        "direction"
-      ]
-    }
-  },
-  {
-    "name": "press_button",
-    "description": "Press a hardware button",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "button": {
-          "type": "string",
-          "enum": [
-            "home",
-            "lock",
-            "volumeUp",
-            "volumeDown"
-          ],
-          "description": "Button to press"
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "button"
-      ]
-    }
-  },
-  {
-    "name": "type_text",
-    "description": "Type text into the currently focused input field",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "text": {
-          "type": "string",
-          "description": "Text to type"
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "text"
-      ]
-    }
-  },
-  {
-    "name": "screenshot",
-    "description": "Return images in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]} in the same order as image blocks. screenSize is in points; imageSize in pixels; deviceInfo.scale is native screen pixels per point, identical in logical and pixel modes. Pass screenshotId with image-pixel coordinates to gestures for automatic conversion; no manual math. An ID is returned only when mapping is available. IDs last 5 minutes, newest 20 per device per server session. Recapture after rotation or navigation; references are bound to their device. Optional mode, format, quality and maxBytes override saved settings for this call only (also in operation_chain); no persistent settings change. Default mode logical: image pixels equal touch points; pixel returns native dimensions; both returns logical then pixel from one capture. screenSize and scale are null if unavailable. Default PNG, maxBytes 5000000 per image.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "mode": {
-          "type": "string",
-          "enum": [
-            "logical",
-            "pixel",
-            "both"
-          ],
-          "default": "logical",
-          "description": "logical: one image pixel per touch point (default); pixel: native pixels; both: logical then pixel from one capture."
-        },
-        "format": {
-          "type": "string",
-          "enum": [
-            "png",
-            "jpeg"
-          ],
-          "description": "PNG (default) preserves UI text without lossy compression. JPEG can save bandwidth."
-        },
-        "quality": {
-          "type": "integer",
-          "minimum": 40,
-          "maximum": 100,
-          "description": "JPEG quality only; ignored for PNG."
-        },
-        "maxBytes": {
-          "type": "integer",
-          "minimum": 10000,
-          "maximum": 5000000,
-          "default": 5000000,
-          "description": "Default 5000000 (5 MB) per image. Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested dimensions cannot fit; never silently resizes."
-        },
-        "path": {
-          "type": "string",
-          "description": "Optional original PNG output path. Explicit paths are not auto-deleted; omitted paths use managed history with maxSavedImages retention."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "describe_ui",
-    "description": "Get the accessibility tree of the current screen",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": []
-    }
-  },
-  {
     "name": "boot_simulator",
     "description": "Boot a simulator by UDID Supply deviceId (or legacy udid); both must agree if provided.",
     "inputSchema": {
@@ -409,6 +95,308 @@
             "udid"
           ]
         }
+      ]
+    }
+  },
+  {
+    "name": "tap",
+    "description": "Tap at specific coordinates on the screen Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "X coordinate",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "description": "Y coordinate",
+          "minimum": 0
+        },
+        "screenshotId": {
+          "type": "string",
+          "description": "Optional ID from screenshot. Coordinates (plus scroll distance, default 200, and pinch radius, default 100) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ]
+    }
+  },
+  {
+    "name": "double_tap",
+    "description": "Double tap at specific coordinates Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "X coordinate",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "description": "Y coordinate",
+          "minimum": 0
+        },
+        "screenshotId": {
+          "type": "string",
+          "description": "Optional ID from screenshot. Coordinates (plus scroll distance, default 200, and pinch radius, default 100) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ]
+    }
+  },
+  {
+    "name": "long_press",
+    "description": "Long press at specific coordinates Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "X coordinate",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "description": "Y coordinate",
+          "minimum": 0
+        },
+        "duration": {
+          "type": "number",
+          "description": "Press duration in seconds (default: 1.0)",
+          "default": 1,
+          "minimum": 0.01,
+          "maximum": 5
+        },
+        "screenshotId": {
+          "type": "string",
+          "description": "Optional ID from screenshot. Coordinates (plus scroll distance, default 200, and pinch radius, default 100) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ]
+    }
+  },
+  {
+    "name": "swipe",
+    "description": "Swipe from one point to another Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x1": {
+          "type": "number",
+          "description": "Start X coordinate",
+          "minimum": 0
+        },
+        "y1": {
+          "type": "number",
+          "description": "Start Y coordinate",
+          "minimum": 0
+        },
+        "x2": {
+          "type": "number",
+          "description": "End X coordinate",
+          "minimum": 0
+        },
+        "y2": {
+          "type": "number",
+          "description": "End Y coordinate",
+          "minimum": 0
+        },
+        "duration": {
+          "type": "number",
+          "description": "Swipe duration in seconds (default: 0.5)",
+          "default": 0.5,
+          "minimum": 0.01,
+          "maximum": 5
+        },
+        "screenshotId": {
+          "type": "string",
+          "description": "Optional ID from screenshot. Coordinates (plus scroll distance, default 200, and pinch radius, default 100) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ]
+    }
+  },
+  {
+    "name": "scroll",
+    "description": "Scroll by swiping from the supplied start point. Direction describes finger movement, not content movement. Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x1": {
+          "type": "number",
+          "description": "Start X coordinate",
+          "minimum": 0
+        },
+        "y1": {
+          "type": "number",
+          "description": "Start Y coordinate",
+          "minimum": 0
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "description": "Finger movement direction: up decreases Y, down increases Y, left decreases X, right increases X."
+        },
+        "distance": {
+          "type": "number",
+          "description": "Distance in the same coordinate units as x1/y1 (default: 200)",
+          "default": 200,
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "screenshotId": {
+          "type": "string",
+          "description": "Optional ID from screenshot. Coordinates (plus scroll distance, default 200, and pinch radius, default 100) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "direction"
+      ]
+    }
+  },
+  {
+    "name": "pinch",
+    "description": "Perform a native simultaneous two-finger pinch around x/y. Scale is final finger separation divided by initial separation: >1 spreads fingers (zoom in), <1 brings them together (zoom out). The app decides its actual zoom and limits. No single-finger approximation. Requires native idb pinch support. Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "description": "Center X coordinate",
+          "minimum": 0
+        },
+        "y": {
+          "type": "number",
+          "description": "Center Y coordinate",
+          "minimum": 0
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 100,
+          "default": 2
+        },
+        "duration": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Gesture duration in seconds",
+          "minimum": 0.01,
+          "maximum": 5
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 10000,
+          "default": 100,
+          "description": "Initial distance of each finger from the center, in the same units as x/y (default 100). Choose a center/radius so the gesture fits the screen."
+        },
+        "screenshotId": {
+          "type": "string",
+          "description": "Optional ID from screenshot. Coordinates (plus scroll distance, default 200, and pinch radius, default 100) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      }
+    }
+  },
+  {
+    "name": "press_button",
+    "description": "Press a hardware button",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "button": {
+          "type": "string",
+          "enum": [
+            "home",
+            "lock",
+            "volumeUp",
+            "volumeDown"
+          ],
+          "description": "Button to press"
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "button"
+      ]
+    }
+  },
+  {
+    "name": "type_text",
+    "description": "Type text into the currently focused input field",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Text to type"
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": [
+        "text"
       ]
     }
   },
@@ -493,6 +481,90 @@
     }
   },
   {
+    "name": "screenshot",
+    "description": "Return images in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]} in the same order as image blocks. screenSize is in points; imageSize in pixels; deviceInfo.scale is native screen pixels per point, identical in logical and pixel modes. Pass screenshotId with image-pixel coordinates to gestures for automatic conversion; no manual math. An ID is returned only when mapping is available. IDs last 5 minutes, newest 20 per device per server session. Recapture after rotation or navigation; references are bound to their device. Optional mode, format, quality and maxBytes override saved settings for this call only (also in operation_chain); no persistent settings change. Default mode logical: image pixels equal touch points; pixel returns native dimensions; both returns logical then pixel from one capture. screenSize and scale are null if unavailable. Default PNG, maxBytes 5000000 per image.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "logical",
+            "pixel",
+            "both"
+          ],
+          "default": "logical",
+          "description": "logical: one image pixel per touch point (default); pixel: native pixels; both: logical then pixel from one capture."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "png",
+            "jpeg"
+          ],
+          "description": "PNG (default) preserves UI text without lossy compression. JPEG can save bandwidth."
+        },
+        "quality": {
+          "type": "integer",
+          "minimum": 40,
+          "maximum": 100,
+          "description": "JPEG quality only; ignored for PNG."
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 5000000,
+          "default": 5000000,
+          "description": "Default 5000000 (5 MB) per image. Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested dimensions cannot fit; never silently resizes."
+        },
+        "path": {
+          "type": "string",
+          "description": "Optional original PNG output path. Explicit paths are not auto-deleted; omitted paths use managed history with maxSavedImages retention."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "describe_ui",
+    "description": "Get the accessibility tree of the current screen",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "get_logs",
+    "description": "Get device logs",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "lines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "description": "Number of lines to retrieve (default: 100)"
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": []
+    }
+  },
+  {
     "name": "set_location",
     "description": "Set GPS location for the simulator",
     "inputSchema": {
@@ -519,26 +591,6 @@
         "latitude",
         "longitude"
       ]
-    }
-  },
-  {
-    "name": "get_logs",
-    "description": "Get device logs",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "lines": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 10000,
-          "description": "Number of lines to retrieve (default: 100)"
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": []
     }
   }
 ]
