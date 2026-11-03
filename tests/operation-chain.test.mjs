@@ -51,7 +51,7 @@ test('preflight rejects invalid late steps before any action', async () => {
     assert.deepEqual(events, []);
   }
   const { chain, client } = fixture();
-  await assert.rejects(chain.execute(client, { steps: Array(7).fill({ tool: 'screenshot' }) }, {}), /6 screenshots/);
+  await assert.rejects(chain.execute(client, { steps: Array(7).fill({ tool: 'screenshot' }) }, {}), /6 screenshot/);
   await assert.rejects(chain.execute(client, { steps: Array(4).fill({ tool: 'screenshot', delay: 10 }) }, {}), /30 seconds/);
 });
 test('failure stops subsequent steps and retains earlier images and outcomes', async () => {

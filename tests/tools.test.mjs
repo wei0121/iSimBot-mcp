@@ -13,8 +13,8 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 22);
-    assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'operation_chain'].includes(t.name))), sorted(baseline.filter(t => t.name !== 'screenshot')));
+    assert.equal(listed.length, 23);
+    assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'capture', 'operation_chain'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
   } finally { await client.close(); }
 });
 

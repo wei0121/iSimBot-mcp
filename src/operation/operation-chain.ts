@@ -20,7 +20,7 @@ export function createOperationChain(
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Execute steps sequentially and return all results/images together. Each delay defaults to 0.3 seconds and is measured after the previous step completes. Example: screenshot, tap with delay 0.3, screenshot with delay 0.3. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 screenshots, 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle and list tools are not allowed inside chains. Screenshot settings and retention still apply.',
+      description: 'Execute steps sequentially and return all results/images together. Each delay defaults to 0.3 seconds and is measured after the previous step completes. Example: screenshot, tap with delay 0.3, screenshot with delay 0.3. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle and list tools are not allowed inside chains. Screenshot settings and retention still apply.',
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['steps'],
         properties: {
@@ -52,7 +52,7 @@ export function createOperationChain(
         return { tool: raw.tool, arguments: parameters, delay };
       });
       if (steps.reduce((sum, step) => sum + step.delay, 0) > 30) throw new Error('Total delay (including defaults) cannot exceed 30 seconds.');
-      if (steps.filter(step => step.tool === 'screenshot').length > 6) throw new Error('At most 6 screenshots per chain.');
+      if (steps.filter(step => ['screenshot', 'capture'].includes(String(step.tool))).length > 6) throw new Error('At most 6 screenshot/capture calls combined per chain.');
       const outcomes: Record<string, unknown>[] = [];
       const content: CallToolResult['content'] = [];
       let imageBytes = 0;
@@ -89,7 +89,7 @@ export function createOperationChain(
         structuredContent: summary,
         ...(failed ? { isError: true } : {}),
         content: [{ type: 'text', text: JSON.stringify({
-          success: !failed, steps: outcomes.map(({ result, ...step }) => step.tool === 'screenshot' ? step : { ...step, ...(result !== undefined ? { result } : {}) }), skippedSteps: steps.length - outcomes.length,
+          success: !failed, steps: outcomes.map(({ result, ...step }) => ['screenshot', 'capture'].includes(String(step.tool)) ? step : { ...step, ...(result !== undefined ? { result } : {}) }), skippedSteps: steps.length - outcomes.length,
           ...(failed ? { note: 'Stopped after failure. Earlier operations may have changed the app; nothing was rolled back.' } : {}),
         }, null, 2) }, ...content],
       };

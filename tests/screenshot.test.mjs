@@ -90,7 +90,10 @@ test('MCP setup configures subsequent image responses, survives server recreatio
       await server.connect(a); await client.connect(b);
       const response = await client.callTool({ name: 'setup', arguments: restart ? {} : { mode: 'logical' } });
       assert.equal(JSON.parse(response.content[0].text).configuration.mode, 'logical');
-      const image = await client.callTool({ name: 'screenshot', arguments: {} });
+      const image = await client.callTool({ name: 'capture', arguments: {} });
+      const native = await client.callTool({ name: 'screenshot', arguments: {} });
+      assert.equal(native.structuredContent.imageSize.width, 200);
+      assert.ok(!('elements' in native.structuredContent));
       assert.equal(image.content[0].type, 'image');
       assert.equal(image.structuredContent.imageSize.width, 100);
       const bad = await client.callTool({ name: 'setup', arguments: { scale: -1 } });
