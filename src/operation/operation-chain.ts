@@ -16,7 +16,7 @@ export function createOperationChain(
   operations: ToolDefinition[],
   sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)),
 ): ToolDefinition {
-  const registry = new Map(operations.filter(t => !['setup', 'operation_chain', 'connect_device', 'boot_simulator', 'shutdown_simulator', 'list_devices'].includes(t.definition.name)).map(t => [t.definition.name, t]));
+  const registry = new Map(operations.filter(t => !['setup', 'operation_chain', 'boot_simulator', 'shutdown_simulator', 'list_devices'].includes(t.definition.name)).map(t => [t.definition.name, t]));
   return {
     definition: {
       name: 'operation_chain',

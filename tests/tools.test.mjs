@@ -13,12 +13,12 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 23);
+    assert.equal(listed.length, 22);
     assert.deepEqual(sorted(listed.filter(t => !['setup', 'screenshot', 'capture', 'operation_chain'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
   } finally { await client.close(); }
 });
 
-test('MCP dispatch reaches all 19 non-image handlers with shared client and retains errors', async () => {
+test('MCP dispatch reaches all 18 non-image handlers with shared client and retains errors', async () => {
   const calls = [];
   const fake = new Proxy({}, { get: (_, method) => method === 'getConnectedDevice' ? () => 'device' : async (...args) => {
     calls.push([method, args]);
@@ -33,7 +33,6 @@ test('MCP dispatch reaches all 19 non-image handlers with shared client and reta
     await client.connect(b);
     const cases = [
       ['list_devices', {}, 'listDevices', []],
-      ['connect_device', { udid: 'device' }, 'connect', ['device']],
       ['boot_simulator', { udid: 'device' }, 'bootSimulator', ['device']],
       ['tap', { x: 1, y: 2 }, 'tap', [1, 2]],
       ['double_tap', { x: 1, y: 2 }, 'doubleTap', [1, 2]],
@@ -59,8 +58,8 @@ test('MCP dispatch reaches all 19 non-image handlers with shared client and reta
       if (name === 'list_devices') assert.deepEqual(value, []);
       else assert.equal(value.success, true, name);
     }
-    assert.equal(calls.length, 19);
-    for (const [name, args, message] of [['missing', {}, 'Unknown tool: missing'], ['connect_device', { udid: 'fail' }, 'connection failed']]) {
+    assert.equal(calls.length, 18);
+    for (const [name, args, message] of [['missing', {}, 'Unknown tool: missing'], ['connect_device', { udid: 'fail' }, 'Unknown tool: connect_device']]) {
       const result = await client.callTool({ name, arguments: args });
       assert.equal(result.isError, true);
       assert.deepEqual(JSON.parse(result.content[0].text), { success: false, error: message });

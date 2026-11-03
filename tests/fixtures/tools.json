@@ -9,36 +9,6 @@
     }
   },
   {
-    "name": "connect_device",
-    "description": "Connect to a specific iOS simulator or device by UDID Supply deviceId (or legacy udid); both must agree if provided.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "udid": {
-          "type": "string",
-          "description": "Device UDID"
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [],
-      "anyOf": [
-        {
-          "required": [
-            "deviceId"
-          ]
-        },
-        {
-          "required": [
-            "udid"
-          ]
-        }
-      ]
-    }
-  },
-  {
     "name": "boot_simulator",
     "description": "Boot a simulator by UDID Supply deviceId (or legacy udid); both must agree if provided.",
     "inputSchema": {
@@ -50,22 +20,10 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full UDID, or exact unique device name. Required unless legacy udid is supplied."
         }
       },
-      "required": [],
-      "anyOf": [
-        {
-          "required": [
-            "deviceId"
-          ]
-        },
-        {
-          "required": [
-            "udid"
-          ]
-        }
-      ]
+      "required": []
     }
   },
   {
@@ -80,22 +38,10 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full UDID, or exact unique device name. Required unless legacy udid is supplied."
         }
       },
-      "required": [],
-      "anyOf": [
-        {
-          "required": [
-            "deviceId"
-          ]
-        },
-        {
-          "required": [
-            "udid"
-          ]
-        }
-      ]
+      "required": []
     }
   },
   {
@@ -121,7 +67,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -153,7 +99,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -192,7 +138,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -241,7 +187,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -292,7 +238,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -349,7 +295,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       }
     }
@@ -372,7 +318,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -392,7 +338,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -412,7 +358,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -432,7 +378,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -452,7 +398,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -472,7 +418,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
@@ -524,7 +470,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": []
@@ -574,7 +520,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": []
@@ -588,7 +534,7 @@
       "properties": {
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": []
@@ -608,7 +554,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": []
@@ -634,7 +580,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
       },
       "required": [
