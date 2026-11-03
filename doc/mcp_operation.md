@@ -67,6 +67,11 @@ without `screenshotId`. Accessibility may not expose every visible element.
 | `setup` | Read or update image settings and screenshot retention; separate from CLI setup. |
 | `operation_chain` | Run a sequence of actions and captures on one device, returning results together. |
 
-Chain `delay` defaults to 0.3 seconds after the previous step completes.
+Chain `delay` is the wait after the previous operation completes, before the current
+operation. It is optional, defaults to 0.3 seconds, and 0 means no delay.
+
+To inspect animations, follow an action with consecutive `screenshot` steps using
+`delay: 0.1`. Screenshot processing time is additional.
+
 A failed step stops the remaining steps. Each chain allows up to 20 steps and
 6 combined `screenshot`/`capture` calls.

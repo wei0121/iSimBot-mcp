@@ -20,7 +20,7 @@ export function createOperationChain(
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Execute steps sequentially and return all results/images together. Each delay defaults to 0.3 seconds and is measured after the previous step completes. Example: screenshot, tap with delay 0.3, screenshot with delay 0.3. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle and list tools are not allowed inside chains. Screenshot settings and retention still apply.',
+      description: 'Execute steps sequentially and return all results/images together. Optional delay is the wait after the previous operation completes, before the current operation. Default: 0.3 seconds; 0 means no delay. To inspect animations, follow an action with consecutive screenshot steps using delay: 0.1; screenshot processing time is additional. Stops on failure; completed actions are not rolled back. Up to 20 steps, 6 image-producing calls (screenshot and capture combined), 30 seconds total delay (including defaults). The whole chain runs on one device without interleaving other operations on that device. Device lifecycle and list tools are not allowed inside chains. Screenshot settings and retention still apply.',
       inputSchema: {
         type: 'object', additionalProperties: false, required: ['steps'],
         properties: {
@@ -31,7 +31,7 @@ export function createOperationChain(
               properties: {
                 tool: { type: 'string', enum: [...registry.keys()] },
                 arguments: { type: 'object', description: 'Arguments of the selected tool, using its normal schema; defaults to {}.' },
-                delay: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Seconds to wait AFTER the immediately preceding operation completes, before starting this step. Not an offset from chain start. Default 0.3; use 0 to skip waiting; decimals such as 0.3 are supported. For the first step, waits before the first operation.' },
+                delay: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Optional delay in seconds after the previous operation completes, before this operation. Default: 0.3; 0 means no delay.' },
               },
             },
           },
