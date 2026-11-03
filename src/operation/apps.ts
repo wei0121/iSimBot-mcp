@@ -3,6 +3,29 @@ import type { ToolDefinition } from '../mcp/tool-definition.js';
 export const appsTools: ToolDefinition[] = [
   {
     definition: {
+      name: 'list_apps',
+      description: 'List installed apps on the selected device, including bundleId, name, installType and processState. Does not launch apps.',
+      inputSchema: { type: 'object', properties: {} },
+    },
+    async execute(idbClient) {
+      return { success: true, apps: await idbClient.listApps() };
+    },
+  },
+  {
+    definition: {
+      name: 'open_url',
+      description: 'Open an absolute URL or deep link on the selected device. The app must support the URL scheme. Success means the open request was sent, not that the destination page is ready; use capture to inspect it.',
+      inputSchema: { type: 'object', properties: {
+        url: { type: 'string', format: 'uri', description: 'Absolute URL, e.g. https://example.com or myapp://page. Encode spaces.' },
+      }, required: ['url'] },
+    },
+    async execute(idbClient, args) {
+      await idbClient.openUrl(args.url as string);
+      return { success: true, message: 'URL open request sent. Use capture to inspect the destination.' };
+    },
+  },
+  {
+    definition: {
       name: 'install_app',
       description: 'Install an app on the connected device',
       inputSchema: {

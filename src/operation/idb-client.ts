@@ -167,6 +167,31 @@ export class IDBClient {
     }
   }
 
+  async openUrl(url: string): Promise<void> {
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    if (typeof url !== 'string' || /[\s\x00-\x1f\x7f]/.test(url)) throw new Error('Provide an absolute URL with a scheme; encode spaces and control characters.');
+    try { new URL(url); } catch { throw new Error('Provide an absolute URL with a scheme, such as https://example.com or myapp://page.'); }
+    try {
+      await run('idb', ['open', '--udid', this.udid, '--', url]);
+    } catch {
+      throw new Error('Could not open URL on this device. Check the URL and that an installed app handles its scheme. A page may have opened; inspect with capture before retrying.');
+    }
+  }
+
+  async listApps(): Promise<{ bundleId: string; name: string | null; installType: string | null; processState: string | null }[]> {
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    const { stdout } = await run('idb', ['list-apps', '--udid', this.udid, '--json', '--fetch-process-state']);
+    const text = stdout.trim();
+    const apps = !text ? [] : text.startsWith('[') ? JSON.parse(text)
+      : text.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
+    if (!Array.isArray(apps) || apps.some(app => !app || typeof app.bundle_id !== 'string' || !app.bundle_id)) throw new Error('Invalid app list returned by idb');
+    return apps.map(app => ({ bundleId: app.bundle_id,
+      name: typeof app.name === 'string' ? app.name : null,
+      installType: typeof app.install_type === 'string' ? app.install_type : null,
+      processState: typeof app.process_state === 'string' ? app.process_state : null,
+    }));
+  }
+
   async screenshot(outputPath?: string): Promise<string> {
     if (!this.udid) {
       throw new Error('No internal device connection. Retry the operation with deviceId.');

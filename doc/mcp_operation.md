@@ -25,6 +25,8 @@ device run sequentially; different devices can run concurrently.
 
 | Operation | Description |
 | --- | --- |
+| `list_apps` | List installed apps with bundle ID, name, install type and process state. |
+| `open_url` | Open a URL or App deep link on the selected device; inspect the destination with `capture`. |
 | `install_app` | Install a simulator `.app` from a local path. |
 | `launch_app` | Launch or foreground an app by bundle ID. |
 | `terminate_app` | Stop an app by bundle ID. |
@@ -67,6 +69,36 @@ without `screenshotId`. Accessibility may not expose every visible element.
 | `setup` | Read or update image settings and screenshot retention; separate from CLI setup. |
 | `operation_chain` | Run a sequence of actions and captures on one device, returning results together. |
 
-Chain `delay` defaults to 0.3 seconds after the previous step completes.
+Chain `delay` is the wait after the previous operation completes, before the current
+operation. It is optional, defaults to 0.3 seconds, and 0 means no delay.
+
+To inspect animations, follow an action with consecutive `screenshot` steps using
+`delay: 0.1`. Screenshot processing time is additional.
+
 A failed step stops the remaining steps. Each chain allows up to 20 steps and
 6 combined `screenshot`/`capture` calls.
+
+## Recording
+
+| Operation | Description |
+| --- | --- |
+| `start_recording` | Start background recording on a device. Optional `maxDuration`: 1–3600 seconds, default 300; `path`: absolute `.mp4` destination. |
+| `stop_recording` | Stop and wait for the MP4 file to finish saving. |
+| `recording_status` | Read active or last recording status, including auto-stop and failures. |
+
+Recordings use native resolution and H.264 MP4. Each device can record once at a
+time while other operations continue. Omit `path` to save under `recordings` beside
+the current configuration file, or supply an absolute `.mp4` file path. Missing
+parent directories are created; existing files are never overwritten. Recordings
+are not automatically deleted. Results include
+`path`, `sizeBytes` and elapsed `durationSeconds` (not decoded media duration).
+The path is local to the MCP host; video is not returned as image data. Recording
+uses a temporary file first, then transfers it to the recording directory. If the
+transfer fails, `recoveryPath` points to the preserved temporary video.
+
+All three tools work in `operation_chain`. If a chain fails, a recording started
+by that chain is stopped and its file result appears in `recordingCleanup`.
+A successful chain can leave recording active until a later stop or auto-stop.
+Normal server shutdown and `shutdown_simulator` attempt to finalize recordings.
+Force-killing the server or shutting down a simulator externally can leave an
+incomplete file. Recording status is kept only for the current server session.

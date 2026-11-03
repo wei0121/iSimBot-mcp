@@ -1,3 +1,4 @@
+import { stopClientRecording } from './recording.js';
 import { randomBytes } from 'node:crypto';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IDBClient } from './idb-client.js';
@@ -43,6 +44,12 @@ export class DeviceManager {
   private exposeDeviceInfo(data: unknown): void {
     if (!data || typeof data !== 'object') return;
     const value = data as Record<string, any>;
+    if (value.recordingId && typeof value.deviceId === 'string') {
+      const udid = this.identifier(value.deviceId);
+      value.deviceId = this.shortId(udid); value.udid = udid;
+    }
+    if (value.recordingCleanup) this.exposeDeviceInfo(value.recordingCleanup);
+    if (value.recording) this.exposeDeviceInfo(value.recording);
     if (value.deviceInfo && typeof value.deviceInfo.deviceId === 'string') {
       const udid = this.identifier(value.deviceInfo.deviceId);
       value.deviceInfo = { ...value.deviceInfo, deviceId: this.shortId(udid), udid };
@@ -114,6 +121,7 @@ export class DeviceManager {
   }
 
   private enqueue<T>(id: string, action: () => Promise<T>): Promise<T> {
+    if (this.closing) return Promise.reject(new Error('MCP server is shutting down.'));
     const previous = this.queues.get(id) || Promise.resolve();
     const result = previous.then(action);
     const tail = result.then(() => {}, () => {});
@@ -122,7 +130,21 @@ export class DeviceManager {
     return result;
   }
 
+  private closing = false;
+  private closed?: Promise<void>;
+  close(): Promise<void> {
+    this.closing = true;
+    return this.closed ??= (async () => {
+      await Promise.allSettled([...this.queues.values()]);
+      await Promise.allSettled([...this.clients.values()].map(async client => {
+        const result = await stopClientRecording(client, 'server_shutdown');
+        if (result && !result.success) console.error('Recording shutdown failed:', JSON.stringify(result));
+      }));
+    })();
+  }
+
   async execute(tool: ToolDefinition, args: Record<string, unknown>, settings: ScreenshotSettingsStore): Promise<unknown> {
+    if (this.closing) throw new Error('MCP server is shutting down.');
     const name = tool.definition.name;
     if (globalTools.has(name)) {
       const result = await tool.execute(this.discovery, args, settings);
@@ -140,6 +162,7 @@ export class DeviceManager {
       return this.enqueue(id, async () => {
         const client = this.clients.get(id) || this.createClient();
         const result = await tool.execute(client, parameters, settings);
+        this.exposeDeviceInfo(result);
         if (name === 'shutdown_simulator') {
           clearScreenshotCoordinates(client);
           this.clients.delete(id);
@@ -167,7 +190,15 @@ export class DeviceManager {
       // Recheck references after waiting: reconnect/shutdown may invalidate them.
       this.select({ ...parameters, deviceId: id });
       const result = await tool.execute(client, parameters, settings);
-      if (tool.responseType === 'mcp') this.exposeDeviceInfo((result as CallToolResult).structuredContent);
+      this.exposeDeviceInfo(tool.responseType === 'mcp' ? (result as CallToolResult).structuredContent : result);
+      if (name === 'operation_chain') {
+        const text = (result as CallToolResult).content[0];
+        if (text?.type === 'text') {
+          const summary = JSON.parse(text.text);
+          this.exposeDeviceInfo(summary);
+          text.text = JSON.stringify(summary, null, 2);
+        }
+      }
       return result;
     });
   }
