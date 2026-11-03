@@ -482,7 +482,7 @@
   },
   {
     "name": "screenshot",
-    "description": "Return images in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]} in the same order as image blocks. screenSize is in points; imageSize in pixels; deviceInfo.scale is native screen pixels per point, identical in logical and pixel modes. Pass screenshotId with image-pixel coordinates to gestures for automatic conversion; no manual math. An ID is returned only when mapping is available. IDs last 5 minutes, newest 20 per device per server session. Recapture after rotation or navigation; references are bound to their device. Optional mode, format, quality and maxBytes override saved settings for this call only (also in operation_chain); no persistent settings change. Default mode logical: image pixels equal touch points; pixel returns native dimensions; both returns logical then pixel from one capture. screenSize and scale are null if unavailable. Default PNG, maxBytes 5000000 per image.",
+    "description": "Take a screenshot only, without reading accessibility. Default mode pixel: original native dimensions, regardless of saved mode. Explicit mode can request logical or both. Images are returned in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]}. screenSize is in logical points; imageSize in pixels. Pass screenshotId with image-pixel coordinates to gestures for conversion. References expire after 5 minutes, newest 20 per device; recapture after rotation/navigation. Default PNG, 5 MB per image; never silently resize to meet the byte limit. Format, quality and maxBytes use saved settings unless overridden for this call.",
     "inputSchema": {
       "type": "object",
       "additionalProperties": false,
@@ -494,8 +494,8 @@
             "pixel",
             "both"
           ],
-          "default": "logical",
-          "description": "logical: one image pixel per touch point (default); pixel: native pixels; both: logical then pixel from one capture."
+          "default": "pixel",
+          "description": "Defaults to pixel (original dimensions); logical and both are explicit overrides."
         },
         "format": {
           "type": "string",
@@ -520,7 +520,57 @@
         },
         "path": {
           "type": "string",
-          "description": "Optional original PNG output path. Explicit paths are not auto-deleted; omitted paths use managed history with maxSavedImages retention."
+          "description": "Optional original PNG output path. Explicit paths are not auto-deleted; otherwise managed history retention applies."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "capture",
+    "description": "Capture the screen and all accessibility elements. Default mode logical (or saved setup mode). Top-level elements includes label, title, value, identifier, role, type, enabled, frame and center. Both mode includes one elements list alongside images. Element frames and centers ALWAYS use logical points: tap center with the same deviceId WITHOUT screenshotId. Image and accessibility reads are sequential, not atomic; centers do not guarantee visibility or tappability. Accessibility failure preserves images with elements:null and elementsError. Images are returned in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]}. screenSize is in logical points; imageSize in pixels. Pass screenshotId with image-pixel coordinates to gestures for conversion. References expire after 5 minutes, newest 20 per device; recapture after rotation/navigation. Default PNG, 5 MB per image; never silently resize to meet the byte limit. Format, quality and maxBytes use saved settings unless overridden for this call.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "logical",
+            "pixel",
+            "both"
+          ],
+          "default": "logical",
+          "description": "Defaults to saved mode (logical initially); pixel or both are optional overrides."
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "png",
+            "jpeg"
+          ],
+          "description": "PNG (default) preserves UI text without lossy compression. JPEG can save bandwidth."
+        },
+        "quality": {
+          "type": "integer",
+          "minimum": 40,
+          "maximum": 100,
+          "description": "JPEG quality only; ignored for PNG."
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 5000000,
+          "default": 5000000,
+          "description": "Default 5000000 (5 MB) per image. Maximum encoded image bytes BEFORE Base64 (~4/3 expansion). Returns an error if the requested dimensions cannot fit; never silently resizes."
+        },
+        "path": {
+          "type": "string",
+          "description": "Optional original PNG output path. Explicit paths are not auto-deleted; otherwise managed history retention applies."
         },
         "deviceId": {
           "type": "string",

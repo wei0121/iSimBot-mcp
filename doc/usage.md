@@ -63,11 +63,12 @@ Optional parameters show their defaults. Durations and delays are in seconds.
 | `describe_ui` | — | — |
 | `get_logs` | — | `lines: 100` |
 | `screenshot` | — | `path`, `mode`, `format`, `quality`, `maxBytes` |
+| `capture` | — | `path`, `mode`, `format`, `quality`, `maxBytes` |
 | `setup` | — | Screenshot settings below |
 | `operation_chain` | `steps` | — |
 
 `scroll.direction` is finger movement: `up`, `down`, `left`, or `right`.
-Pass the `screenshotId` returned by `screenshot` to any coordinate gesture
+Pass the `screenshotId` returned by `screenshot` or `capture` to any coordinate gesture
 (`tap`, `double_tap`, `long_press`, `swipe`, `scroll`, `pinch`). Coordinates then
 use pixels of that returned image; MCP converts them to simulator points:
 
@@ -94,6 +95,8 @@ Tools return text results; screenshots also return image data directly to the ag
 Failures set `isError`.
 
 ## Screenshot settings
+
+Saved `mode` applies to `capture`; `screenshot` defaults to pixel.
 
 MCP `setup` reads settings with `{}` or updates them, for example `{"mode": "logical"}`.
 It is separate from the CLI setup command. Other saved settings are preserved. Legacy `scale` is ignored; the old 2 MB
@@ -164,7 +167,7 @@ Run actions and screenshots on one device in a single request:
 step also waits unless set to `0`. Results and images arrive together.
 A failure stops remaining steps and keeps completed results; actions are not rolled back.
 
-Limits: 1–20 steps, 6 screenshots, 0–10 seconds per delay, 30 seconds total delay,
+Limits: 1–20 steps, 6 `screenshot`/`capture` calls combined, 0–10 seconds per delay, 30 seconds total delay,
 and 16 MB total Base64 image data (including both images in `both` mode). Chains cannot call `setup`, another chain, `list_devices`, or lifecycle tools.
 Set `deviceId` on the chain, not individual steps. Same-device requests wait until
 the chain finishes.
@@ -180,3 +183,20 @@ for the target process to report Running (up to 10 seconds), foregrounding an
 already-running app. This does not wait for UI/network
 content to settle. Gestures do not perform HID reconnects or automatic retries;
 inspect the screen after a failure before retrying an action.
+
+## Capture elements
+
+`screenshot` returns only images and metadata, defaulting to native pixel dimensions
+regardless of saved mode. `capture` defaults to logical dimensions (or saved setup
+mode) and adds `structuredContent.elements`: all accessibility
+nodes with label, title, value, identifier, role, type, enabled, frame and center.
+`frame` and `center` always use logical points, including pixel mode. Tap the
+center with the same `deviceId` and **without `screenshotId`**. Both mode returns
+one list alongside `images`. Missing or empty frames have a null center.
+
+Use `screenshot` when no elements are needed. Both tools accept explicit `mode`
+overrides and work in `operation_chain`, sharing its six image-call limit.
+An empty tree returns `[]`; a read/parse failure preserves the image and returns
+`elements: null` with `elementsError`. Capture and tree reading are sequential,
+so refresh after navigation or animation. Centers do not guarantee visibility
+or tappability; custom-drawn content may only be identifiable in the image.

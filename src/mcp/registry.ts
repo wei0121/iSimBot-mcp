@@ -1,4 +1,5 @@
 import { validateArguments } from './validate-arguments.js';
+import { captureTools } from '../operation/capture.js';
 import { screenshotTools } from '../operation/screenshot.js';
 import { createOperationChain } from '../operation/operation-chain.js';
 import { settingsTools } from '../setting/setup.js';
@@ -16,6 +17,7 @@ export const tools: ToolDefinition[] = [
   ...inputTools,
   ...appsTools,
   ...screenshotTools,
+  ...captureTools,
   ...inspectionTools,
   ...locationTools,
   ...settingsTools,
@@ -23,7 +25,7 @@ export const tools: ToolDefinition[] = [
 
 // Validate before any backend operation, including direct tool calls.
 for (const tool of tools) {
-  if (['setup', 'screenshot'].includes(tool.definition.name)) continue;
+  if (['setup', 'screenshot', 'capture'].includes(tool.definition.name)) continue;
   const execute = tool.execute;
   tool.execute = async (client, args, settings) => {
     validateArguments(tool, args);
