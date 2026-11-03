@@ -90,25 +90,25 @@ export class IDBClient {
   }
 
   async tap(x: number, y: number): Promise<void> {
-    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     await this.sendTap(x, y, 0.1);
   }
 
   async doubleTap(x: number, y: number): Promise<void> {
-    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     await this.sendTap(x, y, 0.1);
     await new Promise(resolve => setTimeout(resolve, 100));
     await this.sendTap(x, y, 0.1);
   }
 
   async longPress(x: number, y: number, duration: number = 1.0): Promise<void> {
-    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     await this.sendTap(x, y, duration);
   }
 
   async swipe(x1: number, y1: number, x2: number, y2: number, duration: number = 0.5): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -119,7 +119,7 @@ export class IDBClient {
   }
 
   async scroll(x1: number, y1: number, direction: 'up' | 'down' | 'left' | 'right', distance: number = 200): Promise<void> {
-    if (!this.udid) throw new Error('No device connected. Call connect() first.');
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     let x2 = x1, y2 = y1;
     switch (direction) {
       case 'up': y2 -= distance; break;
@@ -133,7 +133,7 @@ export class IDBClient {
 
   async pressButton(button: 'home' | 'lock' | 'volumeUp' | 'volumeDown'): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     const buttonMap: Record<string, string> = {
@@ -157,7 +157,7 @@ export class IDBClient {
 
   async typeText(text: string): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -169,7 +169,7 @@ export class IDBClient {
 
   async screenshot(outputPath?: string): Promise<string> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     const captureUdid = this.udid;
@@ -193,7 +193,7 @@ export class IDBClient {
 
   async describeUI(): Promise<string> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -223,7 +223,7 @@ export class IDBClient {
 
   async installApp(appPath: string): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -235,7 +235,7 @@ export class IDBClient {
 
   async launchApp(bundleId: string): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -251,7 +251,7 @@ export class IDBClient {
 
   async terminateApp(bundleId: string): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -263,7 +263,7 @@ export class IDBClient {
 
   async uninstallApp(bundleId: string): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -275,7 +275,7 @@ export class IDBClient {
 
   async setLocation(latitude: number, longitude: number): Promise<void> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -287,7 +287,7 @@ export class IDBClient {
 
   async getLogs(lines: number = 100): Promise<string> {
     if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+      throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
     try {
@@ -299,7 +299,7 @@ export class IDBClient {
   }
 
   async pinch(x: number, y: number, scale = 2, duration = 0.5, radius = 100): Promise<void> {
-    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     if (![x, y, scale, duration, radius].every(Number.isFinite) || x < 0 || y < 0 ||
         scale < 0.01 || scale > 100 || duration < 0.01 || duration > 5 || radius <= 0 || radius > 10000) {
       throw new Error('Invalid pinch: nonnegative coordinates, scale 0.01–100, duration 0.01–5 seconds, and radius >0–10000 points required.');

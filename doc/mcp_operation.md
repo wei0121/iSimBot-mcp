@@ -8,12 +8,17 @@ Control existing simulators and apps; iSimBot does not build Xcode projects.
 
 | Operation | Description |
 | --- | --- |
-| `list_devices` | List available devices and connection status. |
+| `list_devices` | List available devices and their boot state. |
 | `boot_simulator` | Start a simulator and wait for boot completion. |
-| `connect_device` | Connect to a device by its UDID. |
 | `shutdown_simulator` | Shut down a simulator. |
 
-With multiple connected devices, specify `deviceId`. Operations on the same
+Device listings include an 8-character `deviceId` and the full `udid`.
+The operation's `deviceId` field accepts either ID or the exact device name.
+Duplicate names are rejected; use a short ID or UDID to disambiguate.
+For example: `capture {"deviceId": "iPhone 18 Pro"}`; MCP connects automatically
+and reuses the connection. Boot a stopped simulator with `boot_simulator` first.
+Short IDs remain stable within one MCP session; after restarting, call
+`list_devices` again or use the full UDID. Screenshot `deviceInfo` includes both IDs. Operations on the same
 device run sequentially; different devices can run concurrently.
 
 ## Apps

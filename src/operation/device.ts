@@ -17,26 +17,6 @@ export const deviceTools: ToolDefinition[] = [
   },
   {
     definition: {
-      name: 'connect_device',
-      description: 'Connect to a specific iOS simulator or device by UDID',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          udid: {
-            type: 'string',
-            description: 'Device UDID',
-          },
-        },
-        required: ['udid'],
-      },
-    },
-    async execute(idbClient, args) {
-      await idbClient.connect(args.udid as string);
-      return { success: true, message: `Connected to ${args.udid}` };
-    },
-  },
-  {
-    definition: {
       name: 'boot_simulator',
       description: 'Boot a simulator by UDID',
       inputSchema: {
