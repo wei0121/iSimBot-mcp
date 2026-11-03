@@ -56,7 +56,6 @@ Optional parameters show their defaults. Durations and delays are in seconds.
 | `long_press` | `x`, `y` | `duration: 1` |
 | `swipe` | `x1`, `y1`, `x2`, `y2` | `duration: 0.5` |
 | `scroll` | `x1`, `y1`, `direction` | `distance: 200` |
-| `pinch` | `x`, `y` | `scale: 2`, `duration: 0.5` |
 | `press_button` | `button`: `home`, `lock`, `volumeUp`, `volumeDown` | — |
 | `type_text` | `text` | — |
 | `set_location` | `latitude`, `longitude` | — |
@@ -67,9 +66,8 @@ Optional parameters show their defaults. Durations and delays are in seconds.
 | `operation_chain` | `steps` | — |
 
 `scroll.direction` is finger movement: `up`, `down`, `left`, or `right`.
-`pinch` currently approximates the gesture with sequential single-finger swipes.
 Pass the `screenshotId` returned by `screenshot` to any coordinate gesture
-(`tap`, `double_tap`, `long_press`, `swipe`, `scroll`, `pinch`). Coordinates then
+(`tap`, `double_tap`, `long_press`, `swipe`, `scroll`). Coordinates then
 use pixels of that returned image; MCP converts them to simulator points:
 
 ```json
@@ -77,8 +75,7 @@ use pixels of that returned image; MCP converts them to simulator points:
 ```
 
 Without `screenshotId`, gestures continue to use simulator points. With it,
-scroll distance also uses image pixels (default 200); duration and pinch scale
-are unchanged. Use the returned image size, not a resized chat preview.
+scroll distance also uses image pixels (default 200); duration is unchanged. Use the returned image size, not a resized chat preview.
 IDs last 5 minutes, retain the newest 20 per device per server session, and are cleared for that device on
 reconnect or shutdown. Recapture after rotation or navigation: IDs identify coordinate maps,
 not live elements, and do not detect UI changes. Invalid references and coordinates
@@ -169,3 +166,10 @@ Limits: 1–20 steps, 6 screenshots, 0–10 seconds per delay, 30 seconds total 
 and 16 MB total Base64 image data (including both images in `both` mode). Chains cannot call `setup`, another chain, `list_devices`, or lifecycle tools.
 Set `deviceId` on the chain, not individual steps. Same-device requests wait until
 the chain finishes.
+
+`pinch` is not exposed until true simultaneous multi-touch is available.
+Boot waits for simulator boot completion (up to 120 seconds). App launch waits
+for the target process to report Running (up to 10 seconds), foregrounding an
+already-running app. This does not wait for UI/network
+content to settle. Gestures do not perform HID reconnects or automatic retries;
+inspect the screen after a failure before retrying an action.

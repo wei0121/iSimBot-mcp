@@ -24,7 +24,7 @@ export const appsTools: ToolDefinition[] = [
   {
     definition: {
       name: 'launch_app',
-      description: 'Launch an app by bundle ID',
+      description: 'Launch an app by bundle ID and wait for its process to report Running (up to 10 seconds). Does not guarantee UI or network content is ready.',
       inputSchema: {
         type: 'object',
         properties: {

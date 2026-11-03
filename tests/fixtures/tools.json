@@ -434,7 +434,7 @@
   },
   {
     "name": "launch_app",
-    "description": "Launch an app by bundle ID",
+    "description": "Launch an app by bundle ID and wait for its process to report Running (up to 10 seconds). Does not guarantee UI or network content is ready.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -539,52 +539,6 @@
         }
       },
       "required": []
-    }
-  },
-  {
-    "name": "pinch",
-    "description": "Perform pinch gesture (zoom in/out) Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.",
-    "inputSchema": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "x": {
-          "type": "number",
-          "description": "Center X coordinate",
-          "minimum": 0
-        },
-        "y": {
-          "type": "number",
-          "description": "Center Y coordinate",
-          "minimum": 0
-        },
-        "scale": {
-          "type": "number",
-          "description": "Scale factor (>1 = zoom in, <1 = zoom out, default: 2.0)",
-          "default": 2,
-          "minimum": 0.01,
-          "maximum": 100
-        },
-        "duration": {
-          "type": "number",
-          "description": "Gesture duration in seconds (default: 0.5)",
-          "default": 0.5,
-          "minimum": 0.01,
-          "maximum": 5
-        },
-        "screenshotId": {
-          "type": "string",
-          "description": "Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching."
-        },
-        "deviceId": {
-          "type": "string",
-          "description": "Device UDID. Optional only with one connected device or a valid screenshotId. Chains bind one device for their entire duration."
-        }
-      },
-      "required": [
-        "x",
-        "y"
-      ]
     }
   }
 ]

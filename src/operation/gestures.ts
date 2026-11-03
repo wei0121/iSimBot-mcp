@@ -171,46 +171,7 @@ export const gesturesTools: ToolDefinition[] = [
       return { success: true, message: `Scrolled ${args.direction}` };
     },
   },
-  {
-    definition: {
-      name: 'pinch',
-      description: 'Perform pinch gesture (zoom in/out)',
-      inputSchema: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          x: {
-            type: 'number',
-            description: 'Center X coordinate',
-          },
-          y: {
-            type: 'number',
-            description: 'Center Y coordinate',
-          },
-          scale: {
-            type: 'number',
-            description: 'Scale factor (>1 = zoom in, <1 = zoom out, default: 2.0)',
-            default: 2,
-          },
-          duration: {
-            type: 'number',
-            description: 'Gesture duration in seconds (default: 0.5)',
-            default: 0.5,
-          },
-        },
-        required: ['x', 'y'],
-      },
-    },
-    async execute(idbClient, args) {
-      await idbClient.pinch(
-        args.x as number,
-        args.y as number,
-        args.scale as number | undefined,
-        args.duration as number | undefined
-      );
-      return { success: true, message: `Pinch gesture at (${args.x}, ${args.y})` };
-    },
-  },
+
 ];
 
 // Keep direct calls and operation-chain calls aligned with the published contract.
@@ -220,7 +181,6 @@ for (const tool of gesturesTools) {
     if (['x', 'y', 'x1', 'y1', 'x2', 'y2'].includes(key)) bounds.minimum = 0;
     if (key === 'duration') { bounds.minimum = 0.01; bounds.maximum = 5; }
     if (key === 'distance') { bounds.minimum = 0; bounds.maximum = 10000; }
-    if (key === 'scale') { bounds.minimum = 0.01; bounds.maximum = 100; }
   }
   tool.definition.inputSchema.properties!.screenshotId = { type: 'string', description: 'Optional ID from screenshot. Coordinates (and scroll distance, default 200) then use pixels of that returned image; MCP converts automatically. Without it, use simulator points. Recapture after rotation, navigation or device switching.' };
   tool.definition.description += ' Pass screenshotId to use returned-image pixel coordinates with automatic conversion. Without screenshotId, coordinates and distances use simulator points.';
