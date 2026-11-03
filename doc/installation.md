@@ -62,3 +62,10 @@ brew uninstall isimbot-mcp
 ```
 
 Uninstalling leaves client configuration and saved screenshots in place.
+
+Local idb uses an installation-specific `/tmp/isbl-<uid>-<hash>` directory for
+companion sockets, connection state and logs. It does not reuse Homebrew's
+`/tmp/idb` companions. Reinstalling from an empty `.runtime` creates a new identity.
+Both installations still control the same simulators: gestures, app state and
+simulator shutdown affect that shared device. Use different devices when running
+local and release sessions at the same time.
