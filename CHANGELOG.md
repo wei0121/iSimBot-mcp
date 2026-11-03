@@ -1,5 +1,18 @@
 # iSimBot-MCP changelog
 
+## 1.0.6
+
+- Add `open_url` for URLs and App deep links, and `list_apps` for installed apps. Both support device selection and operation chains.
+- Add `start_recording`, `stop_recording` and `recording_status` for native-resolution H.264 MP4 recording while other operations continue.
+- Support optional recording `path` and `maxDuration` (default 300 seconds). Record to temporary storage before transferring; never overwrite existing files and preserve a recovery path if transfer fails.
+- Finalize recordings on normal server/device shutdown and stop chain-owned recordings when an operation chain fails.
+- Clarify that optional chain `delay` waits after the previous operation completes (default 0.3 seconds; 0 means no delay), with guidance for animation screenshots.
+
+### Compatibility notes
+
+- Recordings are local files, not MCP image data, and are not automatically deleted. Force-killing the server can leave incomplete recordings.
+- Restart your MCP client after upgrading to refresh tool definitions.
+
 ## 1.0.5
 
 - Automatically connect when a device operation runs; remove the `connect_device` tool.
