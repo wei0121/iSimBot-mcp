@@ -40,7 +40,7 @@ test('MCP dispatch reaches all 19 non-image handlers with shared client and reta
       ['long_press', { x: 1, y: 2 }, 'longPress', [1, 2, undefined]],
       ['swipe', { x1: 1, y1: 2, x2: 3, y2: 4 }, 'swipe', [1, 2, 3, 4, undefined]],
       ['scroll', { x1: 100, y1: 300, direction: 'up' }, 'scroll', [100, 300, 'up', undefined]],
-      ['pinch', { x: 1, y: 2 }, 'pinch', [1, 2, undefined, undefined]],
+      ['pinch', { x: 200, y: 400 }, 'pinch', [200, 400, 2, 0.5, 100]],
       ['press_button', { button: 'home' }, 'pressButton', ['home']],
       ['type_text', { text: 'hello' }, 'typeText', ['hello']],
       ['install_app', { appPath: '/app' }, 'installApp', ['/app']],

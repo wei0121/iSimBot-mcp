@@ -19,15 +19,15 @@ test('scroll starts exactly at supplied point and moves in all four directions',
 test('single/double taps use fixed presses; long press preserves duration and default', async () => {
   const client = new IDBClient();
   const calls = [];
-  client.reconnectHID = async () => calls.push('connect');
+  client.udid = 'test';
   client.sendTap = async (...args) => calls.push(args);
   await client.tap(1, 2);
-  assert.deepEqual(calls.splice(0), ['connect', [1, 2, 0.1]]);
+  assert.deepEqual(calls.splice(0), [[1, 2, 0.1]]);
   await client.doubleTap(3, 4);
-  assert.deepEqual(calls.splice(0), ['connect', [3, 4, 0.1], [3, 4, 0.1]]);
+  assert.deepEqual(calls.splice(0), [[3, 4, 0.1], [3, 4, 0.1]]);
   await client.longPress(5, 6);
   await client.longPress(5, 6, 2);
-  assert.deepEqual(calls, ['connect', [5, 6, 1], 'connect', [5, 6, 2]]);
+  assert.deepEqual(calls, [[5, 6, 1], [5, 6, 2]]);
 });
 test('gesture calls reject obsolete parameters and missing scroll coordinates before executing', async () => {
   const tap = gesturesTools.find(t => t.definition.name === 'tap');

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+import { appIsRunning, waitUntilRunning } from './readiness.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { resolve } from 'node:path';
@@ -76,27 +76,8 @@ export class IDBClient {
       await run('idb', ['connect', '--', udid], { timeout: 30000 });
       clearScreenshotCoordinates(this);
       this.udid = udid;
-
-      // Auto-reconnect HID for coordinate-based control
-      await this.reconnectHID();
     } catch (error) {
       throw new Error(`Failed to connect to device ${udid}: ${(error as Error).message}`);
-    }
-  }
-
-  async reconnectHID(): Promise<void> {
-    if (!this.udid) {
-      throw new Error('No device connected');
-    }
-
-    try {
-      // Disconnect and reconnect HID to ensure clean state
-      await run('idb', ['hid', 'disconnect', '--udid', this.udid], { timeout: 5000 }).catch(() => {});
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await run('idb', ['hid', 'connect', '--udid', this.udid], { timeout: 5000 });
-    } catch (error) {
-      // HID reconnect failure is not fatal - it will auto-retry on next operation
-      console.error(`HID reconnect warning: ${(error as Error).message}`);
     }
   }
 
@@ -109,20 +90,19 @@ export class IDBClient {
   }
 
   async tap(x: number, y: number): Promise<void> {
-    await this.reconnectHID();
+    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
     await this.sendTap(x, y, 0.1);
   }
 
   async doubleTap(x: number, y: number): Promise<void> {
-    // Reconnect once before the pair, not between the two taps.
-    await this.reconnectHID();
+    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
     await this.sendTap(x, y, 0.1);
     await new Promise(resolve => setTimeout(resolve, 100));
     await this.sendTap(x, y, 0.1);
   }
 
   async longPress(x: number, y: number, duration: number = 1.0): Promise<void> {
-    await this.reconnectHID();
+    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
     await this.sendTap(x, y, duration);
   }
 
@@ -130,8 +110,6 @@ export class IDBClient {
     if (!this.udid) {
       throw new Error('No device connected. Call connect() first.');
     }
-
-    await this.reconnectHID();
 
     try {
       await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', x1, y1, x2, y2], { timeout: 10000 });
@@ -228,13 +206,10 @@ export class IDBClient {
 
   async bootSimulator(udid: string): Promise<void> {
     try {
-      await run('xcrun', ['simctl', 'boot', safeIdentifier(udid)], { timeout: 60000 });
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for boot
+      // simctl monitors actual boot progress, including already-booted devices.
+      await run('xcrun', ['simctl', 'bootstatus', safeIdentifier(udid), '-b'], { timeout: 120000 });
     } catch (error) {
-      // Ignore if already booted
-      if (!(error as any).message?.includes('Unable to boot device in current state: Booted')) {
-        throw new Error(`Failed to boot simulator: ${(error as Error).message}`);
-      }
+      throw new Error(`Failed to boot simulator: ${(error as Error).message}`);
     }
   }
 
@@ -264,8 +239,11 @@ export class IDBClient {
     }
 
     try {
-      await run('idb', ['launch', '--udid', this.udid, safeIdentifier(bundleId)], { timeout: 10000 });
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for app to launch
+      await run('idb', ['launch', '--udid', this.udid, '--foreground-if-running', safeIdentifier(bundleId)], { timeout: 10000 });
+      await waitUntilRunning(async remainingMs => {
+        const { stdout } = await run('idb', ['list-apps', '--udid', this.udid!, '--json', '--fetch-process-state'], { timeout: remainingMs });
+        return appIsRunning(stdout, bundleId);
+      });
     } catch (error) {
       throw new Error(`Failed to launch app ${bundleId}: ${(error as Error).message}`);
     }
@@ -320,29 +298,19 @@ export class IDBClient {
     }
   }
 
-  async pinch(x: number, y: number, scale: number = 2.0, duration: number = 0.5): Promise<void> {
-    if (!this.udid) {
-      throw new Error('No device connected. Call connect() first.');
+  async pinch(x: number, y: number, scale = 2, duration = 0.5, radius = 100): Promise<void> {
+    if (!this.udid) throw new Error('No device connected. Call connect_device first.');
+    if (![x, y, scale, duration, radius].every(Number.isFinite) || x < 0 || y < 0 ||
+        scale < 0.01 || scale > 100 || duration < 0.01 || duration > 5 || radius <= 0 || radius > 10000) {
+      throw new Error('Invalid pinch: nonnegative coordinates, scale 0.01–100, duration 0.01–5 seconds, and radius >0–10000 points required.');
     }
-
-    await this.reconnectHID();
-
-    // Pinch is implemented as two-finger gesture
-    // idb doesn't have native pinch, so we simulate with swipes
-    const offset = 50;
-    const x1 = x - offset, y1 = y - offset;
-    const x2 = x + offset, y2 = y + offset;
-
-    if (scale > 1) {
-      // Pinch out (zoom in)
-      await this.swipe(x, y, x1, y1, duration);
-      await new Promise(resolve => setTimeout(resolve, 50));
-      await this.swipe(x, y, x2, y2, duration);
-    } else {
-      // Pinch in (zoom out)
-      await this.swipe(x1, y1, x, y, duration);
-      await new Promise(resolve => setTimeout(resolve, 50));
-      await this.swipe(x2, y2, x, y, duration);
+    try {
+      // Native HIDPinch: simultaneous contacts, never sequential swipes.
+      await run('idb', ['ui', 'pinch', '--udid', this.udid, '--duration', duration,
+        '--radius', radius, '--', x, y, scale], { timeout: 10000 });
+    } catch (error) {
+      throw new Error(`Native pinch failed: ${(error as Error).message}. Requires an idb client/companion with native ui pinch support (project runtime: 1.7.8). No swipe fallback or automatic retry was performed.`);
     }
   }
+
 }
