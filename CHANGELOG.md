@@ -1,5 +1,21 @@
 # iSimBot-MCP changelog
 
+## 1.0.4
+
+- Add multi-device routing: serialize operations per device and run different devices concurrently.
+- Add `capture` with logical-size images and accessibility elements; `screenshot` defaults to native pixel dimensions.
+- Add screenshot-coordinate mapping and native simultaneous two-finger pinch gestures.
+- Harden command execution with argument arrays, validation and bounded timeouts; wait for actual boot/process readiness.
+- Add project-local runtime installation with isolated companion connections, preserving the Homebrew installation.
+- Refresh installation, manual MCP configuration and operation documentation; correct project attribution.
+
+### Compatibility notes
+
+- Screenshot `scale` is replaced by `mode`: `logical`, `pixel` or `both`. The default image limit is now 5 MB per image.
+- Screenshot metadata is returned in `structuredContent`; image data remains in `content`.
+- With multiple connected devices, pass `deviceId` or a valid `screenshotId` where supported.
+- Restart your MCP client after upgrading to refresh tool definitions.
+
 ## 1.0.3
 
 - Fix app launch targeting when multiple simulators are connected.
