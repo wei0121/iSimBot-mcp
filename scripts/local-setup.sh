@@ -107,12 +107,17 @@ while IFS='|' read -r name url sha; do
 done < "$stage/resources"
 "$python" -I -m pip --isolated check
 
+# A new installation must not attach to a companion left by a removed runtime.
+if [[ ! -f "$ISIMBOT_RUNTIME/installation-id" ]]; then
+  uuidgen > "$ISIMBOT_RUNTIME/installation-id"
+fi
+cp "$ISIMBOT_PROJECT_ROOT/scripts/local-idb.py" "$ISIMBOT_RUNTIME/local-idb.py"
 mkdir -p "$ISIMBOT_RUNTIME/bin"
 cat > "$ISIMBOT_RUNTIME/bin/idb" <<'SH'
 #!/bin/bash
 set -euo pipefail
 runtime="$(cd "$(dirname "$0")/.." && pwd -P)"
-exec "$runtime/python/bin/python3" -I -m idb.cli.main "$@"
+exec "$runtime/python/bin/python3" -I "$runtime/local-idb.py" "$@"
 SH
 chmod +x "$ISIMBOT_RUNTIME/bin/idb"
 cd "$ISIMBOT_PROJECT_ROOT"
