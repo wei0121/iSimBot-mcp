@@ -1,5 +1,18 @@
 # iSimBot-MCP changelog
 
+## 1.0.5
+
+- Automatically connect when a device operation runs; remove the `connect_device` tool.
+- Accept a short device ID, full UDID or unique device name in `deviceId`; report ambiguous names with matching devices.
+- Return both short IDs and UDIDs from `list_devices` and capture device metadata. Short IDs last for the server session.
+- Preserve per-device serial execution and parallel execution across devices.
+- Publish releases automatically when a `release/vX.Y.Z` PR merges into `main`; Homebrew tap updates remain separate.
+
+### Compatibility notes
+
+- Pass `deviceId` directly to operations; no explicit connection step is needed. Simulators must already be booted, or be started with `boot_simulator`.
+- Restart your MCP client after upgrading to refresh tool definitions.
+
 ## 1.0.4
 
 - Add multi-device routing: serialize operations per device and run different devices concurrently.
