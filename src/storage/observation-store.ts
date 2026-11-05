@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { timelinePattern } from '../common/operation.js';
 import type { ObservationEvent } from '../operation/observation-events.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { StoredCapture } from './observation-images.js';
 
-export interface StoredEvent extends ObservationEvent { capture?: CallToolResult }
+export interface StoredEvent extends ObservationEvent { capture?: StoredCapture }
 export interface ObservationSession {
   timeline: string; udid: string | null; bundleId: string; startedAt: number; expireAt: number;
   captureInterval: number; handshake?: unknown; error?: string;

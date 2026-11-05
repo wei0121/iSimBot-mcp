@@ -83,9 +83,11 @@ if(args[1]==='launch'){
  const saved=history.find(s=>s.timeline===started.timeline);
  assert.ok(Array.isArray(history));
  assert.deepEqual(JSON.parse(readFileSync(join(started.directory,'observing.json'),'utf8')),[]);
- assert.ok(saved.events.some(e=>e.capture?.content.some(c=>c.type==='image')));
- assert.deepEqual(readdirSync(started.directory).sort(),['observations.json','observing.json']);
+ assert.ok(saved.events.some(e=>e.capture?.images.some(image=>existsSync(image.path))));
+ assert.deepEqual(readdirSync(started.directory).sort(),['images','observations.json','observing.json']);
  assert.ok(Array.isArray(saved.events));
+ assert.ok(!JSON.stringify(saved).includes('base64'));
+ assert.ok(saved.events.filter(e=>e.capture).every(e=>!Object.hasOwn(e.capture,'content')));
  assert.ok(saved.events.every(e=>e.timeline===started.timeline && e.tool==='capture'));
  assert.equal(saved.handshake.timeline,started.timeline);
  assert.equal(existsSync(join(started.directory,'events.jsonl')),false);

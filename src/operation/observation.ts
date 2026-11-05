@@ -1,3 +1,4 @@
+import { saveObservationCapture, readObservationCapture, deleteObservationCapture, type StoredCapture } from '../storage/observation-images.js';
 import { ObservationStore } from '../storage/observation-store.js';
 import { tmpdir } from 'node:os';
 import { readOperationSettings } from '../setting/operation-settings.js';
@@ -34,7 +35,7 @@ class Observation {
   private deadline?: NodeJS.Timeout;
   private captures: Frame[] = [];
   private nextCapture = 0;
-  private captureData = new Map<number, CallToolResult>();
+  private captureData = new Map<number, StoredCapture>();
   private readonly store: ObservationStore;
   private bytes = 0;
   private pending = false;
@@ -149,22 +150,25 @@ class Observation {
         rmSync(png, { force: true });
         this.readEvents();
         if (!this.active) return;
-        const serialized = JSON.stringify(result);
-        this.bytes += Buffer.byteLength(serialized);
-        if (this.bytes > 100 * 1024 * 1024 || this.captures.length >= 200) throw new Error('Observation capture limit reached (200 captures / 100 MB).');
-        this.captureData.set(frame.index, result);
+        const size = result.content.reduce((sum, c) => sum + (c.type === 'image' ? Buffer.from(c.data, 'base64').length : 0), 0);
+        if (this.bytes + size > 100 * 1024 * 1024 || this.captures.length >= 200) throw new Error('Observation capture limit reached (200 captures / 100 MB).');
+        const stored = saveObservationCapture(this.directory, this.timeline, frame.index, result);
+        this.bytes += size;
+        this.captureData.set(frame.index, stored);
       } catch (error) { frame.error = (error as Error).message; }
       finally { rmSync(join(tmpdir(), `isimbot-observation-${this.timeline}-${frame.index}.png`), { force: true }); }
       frame.endedAt = Date.now();
       if (!this.active) return;
       this.captures.push(frame);
+      const discarded: StoredCapture[] = [];
       if (!this.sawTouch) while (this.captures.length > 2) {
         const old = this.captures.shift()!;
         const data = this.captureData.get(old.index);
-        if (data) this.bytes -= Buffer.byteLength(JSON.stringify(data));
+        if (data) { this.bytes -= data.images.reduce((sum, image) => sum + image.sizeBytes, 0); discarded.push(data); }
         this.captureData.delete(old.index);
       }
       this.save();
+      for (const data of discarded) deleteObservationCapture(this.directory, data);
       if (frame.error?.includes('limit reached')) { this.failure = frame.error; await this.stop(); }
     };
     void (schedulers.get(this.client)?.(capture) ?? capture()).catch(error => {
@@ -271,10 +275,12 @@ export const observationTools: ToolDefinition[] = [
         const { capture, ...event } = entry;
         if (!capture) return { ...event, error: 'Capture data unavailable.' };
         if (args.includeImages && images < 2) {
-          content.push({ type: 'text', text: `Capture ${entry.index}; time ${entry.time}` }, ...capture.content.filter(c => c.type === 'image'));
-          images++;
+          try {
+            content.push({ type: 'text', text: `Capture ${entry.index}; time ${entry.time}` }, ...readObservationCapture(store.directory, capture));
+            images++;
+          } catch (error) { return { ...event, metadata: capture.metadata, images: capture.images, error: `Capture image unavailable: ${(error as Error).message}` }; }
         }
-        return { ...event, metadata: capture.structuredContent };
+        return { ...event, metadata: capture.metadata, images: capture.images };
       });
       const summary = { success: true, timeline: id, bundleId: metadata.bundleId, captureInterval: metadata.captureInterval, expireAt: metadata.expireAt, handshake: metadata.handshake, udid: metadata.udid,
         active: sessions.get(client)?.timeline === id && sessions.get(client)!.active,

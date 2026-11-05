@@ -178,9 +178,11 @@ accessibility before sending test actions.
 `observations/observing.json` and `observations/observations.json` each contain a
 root JSON array of session objects. Active sessions are updated in the first;
 stopped/automatically ended sessions are archived in the second. Session objects
-retain their `timeline`, device/app metadata and `events` array. Capture payloads
-(images, metadata and elements) are embedded in events; there are no per-session
-or per-capture JSON files. Events are sorted stably by `time`. Updates parse the
+retain their `timeline`, device/app metadata and `events` array. Capture images are separate files in `observations/images/`, named
+`session_xxxxxxxx-capture-000000-0.png` (or `.jpeg`). Events store image paths,
+metadata and elements, without Base64. Images are read when `includeImages` is
+requested; missing files are reported per event. There are no per-session or
+per-capture JSON files. Events are sorted stably by `time`. Updates parse the
 JSON into objects, merge under a cross-process lock, then serialize and atomically
 replace the file. File membership indicates state; session objects have no `active` field.
 Archive writes complete before observing entries are removed. Ended sessions cannot
