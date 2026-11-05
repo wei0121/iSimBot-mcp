@@ -8,6 +8,7 @@ const output = join(root, 'homebrew', 'local');
 mkdirSync(output, { recursive: true });
 const stage = mkdtempSync(join(output, '.stage-'));
 try {
+  execFileSync('npm', ['run', 'build:observation'], { cwd: root, stdio: 'inherit' });
   execFileSync('npm', ['run', 'build'], { cwd: root, stdio: 'inherit' });
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
   const archive = join(output, `${pkg.name}-${pkg.version}.tar.gz`);

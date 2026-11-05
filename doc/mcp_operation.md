@@ -139,7 +139,7 @@ Normal server shutdown and `shutdown_simulator` attempt to finalize recordings.
 Force-killing the server or shutting down a simulator externally can leave an
 incomplete file. Recording status is kept only for the current server session.
 
-## App observation (experimental, local builds)
+## App observation (experimental)
 
 | Operation | Description |
 | --- | --- |
@@ -147,9 +147,9 @@ incomplete file. Recording status is kept only for the current server session.
 | `stop_observation` | Stop collecting; leave the app running. |
 | `get_observation` | Read a session `timeline`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
 
-Build the native recorder with `./scripts/local-npm run build:observation`.
-New local installations build it automatically. The release pipeline does not
-package this experimental native component yet.
+Homebrew releases include the native recorder. New local installations build it
+automatically; rebuild it after native edits with
+`./scripts/local-npm run build:observation`.
 
 The recorder loads into the selected app at launch; no app source changes,
 macOS input monitoring, or Bonjour discovery are used. It observes both human

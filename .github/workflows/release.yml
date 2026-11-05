@@ -18,7 +18,7 @@ jobs:
       github.event.pull_request.merged == true &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'release/v')
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     timeout-minutes: 25
     permissions:
       contents: write
@@ -44,6 +44,8 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: node scripts/prepare-release.mjs --check
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build simulator observation framework
+        run: npm run build:observation
       - run: npm test
       - name: Build release assets
         env:

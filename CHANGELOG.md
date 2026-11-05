@@ -1,5 +1,19 @@
 # iSimBot-MCP changelog
 
+## 1.0.7
+
+- Add experimental app observation with `start_observation`, `stop_observation` and `get_observation`: record taps, double taps, long presses, swipes and scrolls alongside logical captures and accessibility elements.
+- Store sessions in `observing.json` and `observations.json`, with separate image files. Reading a running session stops and archives it; start/get also finalize expired sessions using `expireAt`. Each new observation creates a new session.
+- Unify observation and operation-chain timeline records. Chain `delay` now measures between operation starts; allow captures during gestures, report conflicting operations, and provide configurable minimum intervals.
+- Add `isimbot clean` for managed screenshots, completed recordings and archived observation images. Preserve active observation media, JSON records, configuration, installation/download caches and custom output paths.
+- Build releases on macOS and bundle the simulator observation framework for Homebrew installations.
+
+### Compatibility notes
+
+- Chain `delay` is now start-to-start, rather than waiting after completion. Update existing chains accordingly; explicit intervals below configured minimums report an error.
+- Observation is app-local and experimental: it restarts the app and does not record keyboard text, system dialogs, other apps or replay multitouch gestures. Older experimental observation schemas are not migrated.
+- Restart your MCP client after upgrading to load the new tools.
+
 ## 1.0.6
 
 - Add `open_url` for URLs and App deep links, and `list_apps` for installed apps. Both support device selection and operation chains.
