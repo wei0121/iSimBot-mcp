@@ -18,7 +18,8 @@ function fixture() {
       return { content: [{ type: 'image', mimeType: 'image/png', data: `image-${pictures}` }] };
     },
   };
-  const chain = createOperationChain([...gesturesTools, ...deviceTools, screenshot], async ms => { events.push(`wait:${ms}`); });
+  let clock = 0;
+  const chain = createOperationChain([...gesturesTools, ...deviceTools, screenshot], async ms => { clock += ms; events.push(`wait:${ms}`); }, () => clock);
   const client = { tap: async (...args) => events.push(['tap', ...args]) };
   return { events, chain, client };
 }
@@ -81,23 +82,42 @@ test('operation_chain is callable over MCP and shares the device client', async 
   } finally { await client.close(); await server.close(); }
 });
 
-test('each delay waits after the previous async operation completes, not from chain start', async () => {
-  let clock = 0;
+test('capture starts while a gesture is running, and results retain start order', async () => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let active = false;
   const starts = [];
-  const tool = {
-    definition: { name: 'slow', inputSchema: { type: 'object', properties: {} } },
-    execute: async () => {
-      starts.push(clock);
-      await Promise.resolve();
-      clock += 2000;
-      return { success: true };
-    },
-  };
-  const chain = createOperationChain([tool], async ms => { clock += ms; });
-  await chain.execute({}, { steps: [
-    { tool: 'slow', delay: 0.1 },
-    { tool: 'slow' },
-    { tool: 'slow', delay: 0 },
-  ] }, {});
-  assert.deepEqual(starts, [100, 2400, 4400]);
+  const chain = createOperationChain([
+    { definition: {name:'swipe',inputSchema:{type:'object',properties:{}}}, execute:async()=>{active=true;starts.push('swipe');await held;active=false;return {success:true};} },
+    { definition: {name:'capture',inputSchema:{type:'object',properties:{}}}, execute:async()=>{assert.equal(active,true);starts.push('capture');release();return {success:true};} },
+  ]);
+  const result=await chain.execute({}, {steps:[{tool:'swipe',delay:0},{tool:'capture',delay:0.02}]}, {});
+  assert.equal(result.structuredContent.success,true);
+  const [swipe,capture]=result.structuredContent.steps;
+  assert.deepEqual(starts,['swipe','capture']);
+  assert.ok(capture.time < swipe.time + swipe.duration);
+  assert.ok(Math.abs(capture.delay-(capture.time-swipe.time)) < 1e-9);
+  assert.match(swipe.timeline,/^chain_[0-9a-f]{8}$/);
+  assert.equal(swipe.timeline,capture.timeline);
+});
+test('conflicting non-image operations fail without running the second gesture',async()=>{
+  let calls=0;
+  const chain=createOperationChain([{definition:{name:'tap',inputSchema:{type:'object',properties:{}}},execute:async()=>{calls++;await new Promise(r=>setTimeout(r,500));return {success:true};}}]);
+  const result=await chain.execute({}, {steps:[{tool:'tap',delay:0},{tool:'tap',delay:0.4},{tool:'tap',delay:0.4}]}, {});
+  assert.equal(calls,1);assert.equal(result.isError,true);
+  assert.equal(result.structuredContent.steps[1].code,'OPERATION_TIME_CONFLICT');
+  assert.equal(result.structuredContent.skippedSteps,1);
+});
+test('source time must agree with start-to-start delays before actions run',async()=>{
+  const {chain,client,events}=fixture();
+  await assert.rejects(chain.execute(client,{steps:[{tool:'tap',arguments:{x:1,y:2},delay:0.3,time:1}]},{}),/time must equal/);
+  assert.deepEqual(events,[]);
+});
+
+test('failure of an in-flight image cancels a later scheduled wait without launching that step',async()=>{
+ let aborted=false,calls=0;
+ const chain=createOperationChain([{definition:{name:'capture',inputSchema:{type:'object',properties:{}}},execute:async()=>{calls++;await new Promise(r=>setTimeout(r,10));throw Error('capture failed');}}],
+   (ms,signal)=>new Promise(resolve=>{signal.addEventListener('abort',()=>{aborted=true;resolve();},{once:true});}));
+ const result=await chain.execute({}, {steps:[{tool:'capture',delay:0},{tool:'capture',delay:10}]}, {});
+ assert.equal(result.isError,true);assert.equal(calls,1);assert.equal(aborted,true);assert.equal(result.structuredContent.skippedSteps,1);
 });

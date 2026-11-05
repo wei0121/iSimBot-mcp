@@ -125,6 +125,7 @@ node="$ISIMBOT_RUNTIME/node/bin/node"
 npm="$ISIMBOT_RUNTIME/node/lib/node_modules/npm/bin/npm-cli.js"
 "$node" "$npm" ci --include=dev --ignore-scripts --no-audit --no-fund
 "$node" "$npm" run build
+"$node" "$npm" run build:observation
 "$ISIMBOT_RUNTIME/bin/idb" --help > /dev/null
 "$ISIMBOT_RUNTIME/idb-companion/idb_companion" --version
 "$node" --input-type=module -e 'import sharp from "sharp"; const b=await sharp({create:{width:10,height:20,channels:3,background:"white"}}).png().toBuffer(); const m=await sharp(b).metadata(); if(m.width!==10||m.height!==20)process.exit(1);'

@@ -1,3 +1,4 @@
+import { setObservationScheduler, stopClientObservation } from './observation.js';
 import { stopClientRecording } from './recording.js';
 import { randomBytes } from 'node:crypto';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -137,6 +138,7 @@ export class DeviceManager {
     return this.closed ??= (async () => {
       await Promise.allSettled([...this.queues.values()]);
       await Promise.allSettled([...this.clients.values()].map(async client => {
+        await stopClientObservation(client);
         const result = await stopClientRecording(client, 'server_shutdown');
         if (result && !result.success) console.error('Recording shutdown failed:', JSON.stringify(result));
       }));
@@ -161,6 +163,7 @@ export class DeviceManager {
       parameters.udid = id;
       return this.enqueue(id, async () => {
         const client = this.clients.get(id) || this.createClient();
+        if (name === 'shutdown_simulator') await stopClientObservation(client);
         const result = await tool.execute(client, parameters, settings);
         this.exposeDeviceInfo(result);
         if (name === 'shutdown_simulator') {
@@ -186,6 +189,7 @@ export class DeviceManager {
           throw new ToolError(`Could not automatically connect to ${id}: ${(error as Error).message}. Check that the device is available and run isimbot doctor.`, { code: 'DEVICE_CONNECTION_FAILED', deviceId: id });
         }
         this.clients.set(id, client);
+        setObservationScheduler(client, task => this.closing ? Promise.resolve() : this.enqueue(id, task));
       }
       // Recheck references after waiting: reconnect/shutdown may invalidate them.
       this.select({ ...parameters, deviceId: id });

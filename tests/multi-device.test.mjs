@@ -71,7 +71,7 @@ test('entire chain owns one queue; other devices continue; lifecycle and cross-d
   const {run,connect,clients,events}=fixture();await connect();
   const entered=deferred(),release=deferred();t.after(()=>release.resolve());
   clients.get('A').tap=async x=>{events.push(['A',x]);if(x===1){entered.resolve();await release.promise;}};
-  const chain=run('operation_chain',{deviceId:'A',steps:[1,2].map(x=>({tool:'tap',arguments:{x,y:0},delay:0}))});
+  const chain=run('operation_chain',{deviceId:'A',steps:[1,2].map(x=>({tool:'tap',arguments:{x,y:0},delay:x===1?0:0.4}))});
   await entered.promise;
   const other=run('tap',{deviceId:'A',x:3,y:0});await run('tap',{deviceId:'B',x:4,y:0});
   assert.deepEqual(events,[['A',1],['B',4,0]]);

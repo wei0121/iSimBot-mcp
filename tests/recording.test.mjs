@@ -153,10 +153,20 @@ test('chain accepts a custom recording path and still records to a temporary fil
   process.env.PATH=`${dir}:${old}`;t.after(()=>{process.env.PATH=old;});
   const client={getConnectedDevice:()=> 'device-A'};
   const path=join(dir,'custom folder','中文 video.mp4');
-  const chain=createOperationChain(recordingTools);
+  let ready;
+  const firstFrame=new Promise(resolve=>{ready=resolve;});
+  const operations=recordingTools.map(tool=>tool.definition.name==='start_recording'?{
+    ...tool,execute:async(...args)=>{const result=await tool.execute(...args);ready();return result;},
+  }:tool);
+  let clock=0;
+  // This test verifies path handling; scheduling is covered by chain tests.
+  // Gate the virtual interval on readiness instead of relying on host load.
+  const chain=createOperationChain(operations,async ms=>{
+    await firstFrame;await new Promise(resolve=>setImmediate(resolve));clock+=ms;
+  },()=>clock);
   const result=await chain.execute(client,{steps:[
     {tool:'start_recording',arguments:{path},delay:0},
-    {tool:'stop_recording',delay:0},
+    {tool:'stop_recording',delay:0.5},
   ]},{path:join(dir,'config','settings.json')});
   assert.equal(result.structuredContent.success,true);
   assert.equal(result.structuredContent.steps[1].result.path,path);
