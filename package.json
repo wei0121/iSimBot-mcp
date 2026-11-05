@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:observation": "bash scripts/build-observation.sh",
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
     "test": "npm run build && node --test tests/*.test.mjs",

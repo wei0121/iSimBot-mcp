@@ -102,3 +102,55 @@ A successful chain can leave recording active until a later stop or auto-stop.
 Normal server shutdown and `shutdown_simulator` attempt to finalize recordings.
 Force-killing the server or shutting down a simulator externally can leave an
 incomplete file. Recording status is kept only for the current server session.
+
+## App observation (experimental, local builds)
+
+| Operation | Description |
+| --- | --- |
+| `start_observation` | Restart an installed app with the recorder. Requires `bundleId`; optional `maxDuration` (default 300 seconds) and `captureInterval` (default 0.5 seconds). |
+| `stop_observation` | Stop collecting; leave the app running. |
+| `get_observation` | Read a `sessionId`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
+
+Build the native recorder with `./scripts/local-npm run build:observation`.
+New local installations build it automatically. The release pipeline does not
+package this experimental native component yet.
+
+The recorder loads into the selected app at launch; no app source changes,
+macOS input monitoring, or Bonjour discovery are used. It observes both human
+and automated touches. Keyboard text actions, system dialogs, other apps and
+multi-touch replay are not supported. Multi-touch/cancelled/incomplete gestures
+are retained as unsupported records instead of guessed commands.
+
+Capture uses logical size and elements. Before the first touch, only the latest
+two captures are retained; afterwards captures continue at the target interval,
+without overlapping reads. Actual start/end timestamps are returned because
+capture may take longer than the interval. Stop limits: 200 retained captures,
+100 MB capture data, 16 MB event data, or `maxDuration`. Sessions are saved under
+`observations` beside the configuration file and are not automatically deleted.
+
+Each page includes candidate `operationChain` steps for that page. Touch paths
+and timing are preserved, but straight swipes approximate curved gestures and
+taps do not reproduce the original hold duration. `replayable` checks command
+limits, not whether replay will have the same UI result. Historical screenshot
+IDs are not live coordinate references. Normal MCP shutdown stops collection;
+a crashed server's recording lease expires after 10 seconds. A normal app
+relaunch removes the injected framework.
+
+The handshake confirms recorder loading, not UI readiness; inspect capture or
+accessibility before sending test actions.
+
+Each session stores one `session.json` with an `events` array. Every event and
+the protocol-v2 handshake carry `sessionId`. Events use `tap`, `double_tap`, `long_press`,
+`scroll`, `swipe`, `capture` or `unsupported`; `time` and `duration` are seconds relative
+to session start. Absolute capture/operation start and end timestamps remain
+available for alignment. Native touch samples use an atomic JSON snapshot in
+the app's temporary directory, removed after successful finalization.
+`captureInterval` is independent per session (0.5–10 seconds, default 0.5).
+
+Double taps require UIKit `tapCount == 2`, a preceding tap within 0.5 seconds
+and a separation of at most 20 logical points. Nearby independent taps remain
+separate. Movement in an enabled ancestor `UIScrollView` whose pan recognizer
+actively handles the gesture is `scroll`; other movement is `swipe`. Custom
+scrolling implementations without a `UIScrollView` fall back to `swipe`. Scroll
+direction describes finger movement; replay uses its dominant axis and backend
+default duration. Raw paths/timing remain available.

@@ -1,3 +1,4 @@
+import { observationTools } from '../operation/observation.js';
 import { recordingTools } from '../operation/recording.js';
 import { validateArguments } from './validate-arguments.js';
 import { captureTools } from '../operation/capture.js';
@@ -18,6 +19,7 @@ export const tools: ToolDefinition[] = [
   ...inputTools,
   ...appsTools,
   ...recordingTools,
+  ...observationTools,
   ...screenshotTools,
   ...captureTools,
   ...inspectionTools,
