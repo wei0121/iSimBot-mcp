@@ -3,7 +3,7 @@ import { currentRecording } from './recording.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { errorResult } from '../mcp/tool-error.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
-import { createParentId, excludedChainTools, imageTools, prepareSteps, type OperationRecord } from '../common/operation.js';
+import { createTimeline, excludedChainTools, imageTools, prepareSteps, type OperationRecord } from '../common/operation.js';
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise(resolve => {
@@ -23,11 +23,11 @@ export function createOperationChain(
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Run steps on one device. delay is the interval from the PREVIOUS step START to this step START, default at least 0.3 seconds (increased when omitted to satisfy per-tool minDelay); first delay is from chain start. time is seconds from chain start; duration is this operation actual elapsed seconds and never added to delay. capture/screenshot may overlap a running gesture. Explicit delays below per-tool minima fail before any operation. Timed gestures require requested duration plus 0.2 seconds before the next non-image operation. Other overlapping commands fail with OPERATION_TIME_CONFLICT rather than silently waiting. Stops launching steps after failure, then waits for started operations to settle; effects are not rolled back. Up to 20 steps, 6 screenshot/capture calls, delay 0–10 seconds each and 30 seconds total. Returns common parentId/tool/arguments/delay/time/duration records in steps. Parent IDs use chain_xxxxxxxx. Device lifecycle and observation tools are excluded. A recording started by a failed chain is stopped; existing recordings are preserved.',
+      description: 'Run steps on one device. delay is the interval from the PREVIOUS step START to this step START, default at least 0.3 seconds (increased when omitted to satisfy per-tool minDelay); first delay is from chain start. time is seconds from chain start; duration is this operation actual elapsed seconds and never added to delay. capture/screenshot may overlap a running gesture. Explicit delays below per-tool minima fail before any operation. Timed gestures require requested duration plus 0.2 seconds before the next non-image operation. Other overlapping commands fail with OPERATION_TIME_CONFLICT rather than silently waiting. Stops launching steps after failure, then waits for started operations to settle; effects are not rolled back. Up to 20 steps, 6 screenshot/capture calls, delay 0–10 seconds each and 30 seconds total. Returns common timeline/tool/arguments/delay/time/duration records in steps. Parent IDs use chain_xxxxxxxx. Device lifecycle and observation tools are excluded. A recording started by a failed chain is stopped; existing recordings are preserved.',
       inputSchema: { type: 'object', additionalProperties: false, required: ['steps'], properties: {
         steps: { type: 'array', minItems: 1, maxItems: 20, items: {
           type: 'object', additionalProperties: false, required: ['tool'], properties: {
-            parentId: { type: 'string', description: 'Optional source session_xxxxxxxx or chain_xxxxxxxx. Execution assigns a new chain parentId.' },
+            timeline: { type: 'string', description: 'Optional source session_xxxxxxxx or chain_xxxxxxxx. Execution assigns a new chain timeline.' },
             tool: { type: 'string', enum: [...registry.keys()] },
             arguments: { type: 'object', description: 'Tool arguments. arguments.duration, when supported, is the requested gesture duration.' },
             delay: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Seconds from previous operation START; first step from chain start. Does not include duration. Explicit values below the previous non-image tool minimum fail preflight. Images do not reset the previous-command interval.' },
@@ -40,8 +40,8 @@ export function createOperationChain(
     responseType: 'mcp',
     async execute(client, args, settings): Promise<CallToolResult> {
       if (Object.keys(args).some(key => key !== 'steps')) throw new Error('Provide steps only.');
-      const parentId = createParentId('chain');
-      const steps = prepareSteps(args.steps, operations, parentId, readOperationSettings(settings));
+      const timeline = createTimeline('chain');
+      const steps = prepareSteps(args.steps, operations, timeline, readOperationSettings(settings));
       const outcomes: Array<(OperationRecord & Record<string, unknown>) | undefined> = new Array(steps.length);
       const images = new Map<number, CallToolResult['content']>();
       const pending: Promise<void>[] = [];
@@ -105,7 +105,7 @@ export function createOperationChain(
       await Promise.all(pending);
       if (failed && ownedRecording?.active) recordingCleanup = await ownedRecording.stop('chain_failed');
       const completed = outcomes.filter((step): step is OperationRecord & Record<string, unknown> => step !== undefined);
-      const summary = { parentId, success: !failed, steps: completed, skippedSteps: steps.length - completed.length,
+      const summary = { timeline, success: !failed, steps: completed, skippedSteps: steps.length - completed.length,
         ...(recordingCleanup ? { recordingCleanup } : {}),
         ...(failed ? { note: 'Stopped launching steps after failure; already started operations were allowed to finish. Nothing was rolled back.' } : {}),
       };

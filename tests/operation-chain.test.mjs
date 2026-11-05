@@ -97,8 +97,8 @@ test('capture starts while a gesture is running, and results retain start order'
   assert.deepEqual(starts,['swipe','capture']);
   assert.ok(capture.time < swipe.time + swipe.duration);
   assert.ok(Math.abs(capture.delay-(capture.time-swipe.time)) < 1e-9);
-  assert.match(swipe.parentId,/^chain_[0-9a-f]{8}$/);
-  assert.equal(swipe.parentId,capture.parentId);
+  assert.match(swipe.timeline,/^chain_[0-9a-f]{8}$/);
+  assert.equal(swipe.timeline,capture.timeline);
 });
 test('conflicting non-image operations fail without running the second gesture',async()=>{
   let calls=0;

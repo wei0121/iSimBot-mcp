@@ -73,12 +73,12 @@ without `screenshotId`. Accessibility may not expose every visible element.
 Observation events and chain results share this shape:
 
 ```json
-{"parentId":"chain_a7k2m9x4","tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"time":1,"delay":1,"duration":0.65}
+{"timeline":"chain_a7k2m9x4","tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"time":1,"delay":1,"duration":0.65}
 ```
 
-`parentId` is `session_xxxxxxxx` or `chain_xxxxxxxx`. All timing uses seconds:
-`time` is this operation's start relative to parent start, `delay` is this start
-minus the previous start (first delay is from parent start), and `duration` is
+`timeline` is `session_xxxxxxxx` or `chain_xxxxxxxx`. All timing uses seconds:
+`time` is this operation's start relative to timeline start, `delay` is this start
+minus the previous start (first delay is from timeline start), and `duration` is
 this operation's own elapsed time. Duration never adds to delay. Chain duration
 measures tool execution; observed gesture duration measures the touch interval.
 `arguments.duration` remains the requested gesture duration when supported.
@@ -88,7 +88,7 @@ Operation three can still be running when operation four starts.
 
 Chain requests require only `tool`; `arguments` defaults to `{}` and `delay` to
 0.3 seconds. Optional source `time` must agree with cumulative delays. Execution
-assigns a fresh chain parentId and measures actual start times/durations. If the
+assigns a fresh chain timeline and measures actual start times/durations. If the
 backend or event loop is late, actual starts may be later than requested.
 
 `capture`/`screenshot` can run during gestures and alongside other images. Overlapping
@@ -145,7 +145,7 @@ incomplete file. Recording status is kept only for the current server session.
 | --- | --- |
 | `start_observation` | Restart an installed app with the recorder. Requires `bundleId`; optional `maxDuration` (default 300 seconds) and `captureInterval` (default 0.5 seconds). |
 | `stop_observation` | Stop collecting; leave the app running. |
-| `get_observation` | Read a session `parentId`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
+| `get_observation` | Read a session `timeline`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
 
 Build the native recorder with `./scripts/local-npm run build:observation`.
 New local installations build it automatically. The release pipeline does not
@@ -176,7 +176,7 @@ The handshake confirms recorder loading, not UI readiness; inspect capture or
 accessibility before sending test actions.
 
 Each session stores one `session.json` with an `events` array. Every event and
-the protocol-v3 handshake carry `parentId`. Events use `tool` values `tap`,
+the protocol-v4 handshake carry `timeline`. Events use `tool` values `tap`,
 `double_tap`, `long_press`, `scroll`, `swipe`, `capture` or `unsupported`, with
 `arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
 the app's temporary directory, removed after successful finalization.
@@ -189,4 +189,4 @@ actively handles the gesture is `scroll`; other movement is `swipe`. Custom
 scrolling implementations without a `UIScrollView` fall back to `swipe`. Scroll
 direction describes finger movement; replay uses its dominant axis and backend
 default duration. Raw paths/timing remain available. Existing experimental UUID/sessionId records
-use the older schema and are not read by the new parentId API.
+use the older schema and are not read by the new timeline API.

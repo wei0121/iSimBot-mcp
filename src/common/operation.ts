@@ -4,19 +4,19 @@ import { randomBytes } from 'node:crypto';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 import { validateArguments } from '../mcp/validate-arguments.js';
 
-export type ParentId = `session_${string}` | `chain_${string}`;
+export type TimelineId = `session_${string}` | `chain_${string}`;
 export interface Operation {
   tool: string;
   arguments: Record<string, unknown>;
 }
 export interface OperationRecord extends Operation {
-  parentId: ParentId;
+  timeline: TimelineId;
   time: number;
   delay: number;
   duration: number;
 }
-export const parentIdPattern = /^(session|chain)_[0-9a-f]{8}$/;
-export function createParentId(kind: 'session' | 'chain'): ParentId { return `${kind}_${randomBytes(4).toString('hex')}`; }
+export const timelinePattern = /^(session|chain)_[0-9a-f]{8}$/;
+export function createTimeline(kind: 'session' | 'chain'): TimelineId { return `${kind}_${randomBytes(4).toString('hex')}`; }
 export const imageTools = new Set(['capture', 'screenshot']);
 export const excludedChainTools = new Set(['start_observation', 'stop_observation', 'get_observation', 'setup', 'operation_chain', 'boot_simulator', 'shutdown_simulator', 'list_devices']);
 export const chainLimits = { steps: 20, images: 6, delay: 10, totalDelay: 30 };
@@ -29,14 +29,14 @@ export function minimumInterval(step: Operation, settings: OperationSettings): n
 }
 
 // Used for executable requests and observed replay candidates alike.
-export function prepareSteps(raw: unknown, operations: ToolDefinition[], parentId: ParentId, settings: OperationSettings = defaultOperationSettings): OperationRecord[] {
+export function prepareSteps(raw: unknown, operations: ToolDefinition[], timeline: TimelineId, settings: OperationSettings = defaultOperationSettings): OperationRecord[] {
   if (!Array.isArray(raw) || !raw.length || raw.length > chainLimits.steps) throw new Error('Provide steps: an array of 1–20 operations.');
   const registry = new Map(operations.filter(t => !excludedChainTools.has(t.definition.name)).map(t => [t.definition.name, t]));
   let time = 0;
-  let sourceParent: unknown;
+  let sourceTimeline: unknown;
   let previousCommand: OperationRecord | undefined;
   const steps = raw.map((item, index): OperationRecord => {
-    if (!object(item) || Object.keys(item).some(key => !['parentId', 'tool', 'arguments', 'delay', 'time', 'duration'].includes(key))) throw new Error(`Invalid step ${index + 1}`);
+    if (!object(item) || Object.keys(item).some(key => !['timeline', 'tool', 'arguments', 'delay', 'time', 'duration'].includes(key))) throw new Error(`Invalid step ${index + 1}`);
     if (typeof item.tool !== 'string' || !registry.has(item.tool)) throw new Error(`Unsupported tool at step ${index + 1}: ${item.tool}`);
     const args = item.arguments === undefined ? {} : item.arguments;
     if (!object(args)) throw new Error(`Invalid arguments at step ${index + 1}`);
@@ -52,13 +52,13 @@ export function prepareSteps(raw: unknown, operations: ToolDefinition[], parentI
     time += delay;
     if (item.time !== undefined && (typeof item.time !== 'number' || !Number.isFinite(item.time) || Math.abs(item.time - time) > 0.000001)) throw new Error(`Step ${index + 1}: time must equal the sum of delays from the parent start.`);
     if (item.duration !== undefined && (typeof item.duration !== 'number' || !Number.isFinite(item.duration) || item.duration < 0)) throw new Error(`Invalid duration at step ${index + 1}`);
-    if (item.parentId !== undefined) {
-      if (typeof item.parentId !== 'string' || !parentIdPattern.test(item.parentId)) throw new Error(`Invalid parentId at step ${index + 1}`);
-      sourceParent ??= item.parentId;
-      if (item.parentId !== sourceParent) throw new Error('All input steps must belong to the same parentId.');
+    if (item.timeline !== undefined) {
+      if (typeof item.timeline !== 'string' || !timelinePattern.test(item.timeline)) throw new Error(`Invalid timeline at step ${index + 1}`);
+      sourceTimeline ??= item.timeline;
+      if (item.timeline !== sourceTimeline) throw new Error('All input steps must belong to the same timeline.');
     }
     validateArguments(registry.get(item.tool)!, args);
-    const step = { parentId, tool: item.tool, arguments: args, delay, time, duration: 0 };
+    const step = { timeline, tool: item.tool, arguments: args, delay, time, duration: 0 };
     if (!imageTools.has(step.tool)) previousCommand = step;
     return step;
   });
@@ -67,10 +67,10 @@ export function prepareSteps(raw: unknown, operations: ToolDefinition[], parentI
   return steps;
 }
 
-export function withRelativeTiming<T extends Operation & { startedAt: number; endedAt: number }>(entries: T[], parentId: ParentId, origin: number): Array<Omit<T, 'startedAt' | 'endedAt'> & OperationRecord> {
+export function withRelativeTiming<T extends Operation & { startedAt: number; endedAt: number }>(entries: T[], timeline: TimelineId, origin: number): Array<Omit<T, 'startedAt' | 'endedAt'> & OperationRecord> {
   let previousStart = origin;
   return [...entries].sort((a, b) => a.startedAt - b.startedAt).map(({ startedAt, endedAt, ...entry }) => {
-    const result = { ...entry, parentId, time: (startedAt - origin) / 1000, delay: (startedAt - previousStart) / 1000, duration: Math.max(0, (endedAt - startedAt) / 1000) };
+    const result = { ...entry, timeline, time: (startedAt - origin) / 1000, delay: (startedAt - previousStart) / 1000, duration: Math.max(0, (endedAt - startedAt) / 1000) };
     previousStart = startedAt;
     return result;
   });

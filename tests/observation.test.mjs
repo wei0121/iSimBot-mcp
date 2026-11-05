@@ -22,16 +22,16 @@ test('cancelled, incomplete and multi-touch gestures are never fabricated as tap
  assert.equal(operationChain(gestures).replayable,false);
  assert.equal(operationChain(gestures).steps.length,0);
 });
-test('JSON snapshots validate handshake and every event parentId; timeline uses semantic types',()=>{
- const parentId='session_aabbccdd';
- const snapshot={parentId,handshake:{type:'ready',protocol:3,parentId,bundleId:'app.test'},samples:[{...event(1000,0),parentId},{...event(1100,3),parentId}]};
- assert.equal(parseObservationSnapshot(JSON.stringify(snapshot),parentId).samples.length,2);
- for(const bad of [ {...snapshot,parentId:'other'}, {...snapshot,handshake:{...snapshot.handshake,parentId:'other'}}, {...snapshot,samples:[{...snapshot.samples[0],parentId:'other'}]} ]) assert.throws(()=>parseObservationSnapshot(JSON.stringify(bad),parentId),/parentId/);
- assert.throws(()=>parseObservationSnapshot(JSON.stringify(snapshot).slice(0,-1),parentId));
- const timeline=observationEvents(translateTouches(snapshot.samples),[{type:'capture',index:0,startedAt:900,endedAt:950}],parentId,500);
- assert.deepEqual(timeline.map(e=>e.tool),['capture','tap']);
- assert.deepEqual(timeline.map(e=>e.time),[0.4,0.5]);
- assert.ok(timeline.every(e=>e.parentId===parentId));
+test('JSON snapshots validate handshake and every event timeline; timeline uses semantic types',()=>{
+ const timeline='session_aabbccdd';
+ const snapshot={timeline,handshake:{type:'ready',protocol:4,timeline,bundleId:'app.test'},samples:[{...event(1000,0),timeline},{...event(1100,3),timeline}]};
+ assert.equal(parseObservationSnapshot(JSON.stringify(snapshot),timeline).samples.length,2);
+ for(const bad of [ {...snapshot,timeline:'other'}, {...snapshot,handshake:{...snapshot.handshake,timeline:'other'}}, {...snapshot,samples:[{...snapshot.samples[0],timeline:'other'}]} ]) assert.throws(()=>parseObservationSnapshot(JSON.stringify(bad),timeline),/timeline/);
+ assert.throws(()=>parseObservationSnapshot(JSON.stringify(snapshot).slice(0,-1),timeline));
+ const events=observationEvents(translateTouches(snapshot.samples),[{type:'capture',index:0,startedAt:900,endedAt:950}],timeline,500);
+ assert.deepEqual(events.map(e=>e.tool),['capture','tap']);
+ assert.deepEqual(events.map(e=>e.time),[0.4,0.5]);
+ assert.ok(events.every(e=>e.timeline===timeline));
  const chain=operationChain(translateTouches([event(0,0),event(100,3),event(20000,0),event(20100,3)]));
  assert.equal(chain.steps[1].delay,20);assert.equal(chain.replayable,false);
 });
@@ -57,9 +57,9 @@ const fs=require('node:fs');const path=require('node:path');
 const args=process.argv.slice(2);
 if(args[1]==='get_app_container')process.stdout.write(${JSON.stringify(container)});
 if(args[1]==='launch'){
- const folder=path.join(${JSON.stringify(container)},'tmp','isimbot-observation-'+process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_PARENT_ID);
- const parentId=process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_PARENT_ID;
- fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({parentId,handshake:{type:'ready',parentId,protocol:3,bundleId:args[3],time:Date.now()},samples:[]}));
+ const folder=path.join(${JSON.stringify(container)},'tmp','isimbot-observation-'+process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE);
+ const timeline=process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE;
+ fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({timeline,handshake:{type:'ready',timeline,protocol:4,bundleId:args[3],time:Date.now()},samples:[]}));
 }
 `,{mode:0o755});
  process.env.PATH=`${dir}:${oldPath}`;
@@ -75,22 +75,22 @@ if(args[1]==='launch'){
  assert.equal(existsSync(join(source,'active')),true);
  await new Promise(r=>setTimeout(r,1400));
  assert.equal(existsSync(join(source,'active')),false);
- const result=await call('get_observation',{parentId:started.parentId,includeImages:true});
+ const result=await call('get_observation',{timeline:started.timeline,includeImages:true});
  assert.equal(result.structuredContent.active,false);
  const saved=JSON.parse(readFileSync(join(started.directory,'session.json'),'utf8'));
  assert.ok(Array.isArray(saved.events));
- assert.ok(saved.events.every(e=>e.parentId===started.parentId && e.tool==='capture'));
- assert.equal(saved.handshake.parentId,started.parentId);
+ assert.ok(saved.events.every(e=>e.timeline===started.timeline && e.tool==='capture'));
+ assert.equal(saved.handshake.timeline,started.timeline);
  assert.equal(existsSync(join(started.directory,'events.jsonl')),false);
  assert.ok(Array.isArray(result.structuredContent.events));
  assert.ok(result.content.some(c=>c.type==='image'));
  assert.ok(result.content.filter(c=>c.type==='image').length<=2);
- await assert.rejects(tools.find(t=>t.definition.name==='get_observation').execute({getConnectedDevice:()=> 'device-two'},{parentId:started.parentId},settings),/different device/);
- await assert.rejects(call('get_observation',{parentId:'../../escape'}),/Invalid parentId/);
+ await assert.rejects(tools.find(t=>t.definition.name==='get_observation').execute({getConnectedDevice:()=> 'device-two'},{timeline:started.timeline},settings),/different device/);
+ await assert.rejects(call('get_observation',{timeline:'../../escape'}),/Invalid timeline/);
  assert.equal((await call('stop_observation')).active,false);
  const second=await call('start_observation',{bundleId:'dev.example.test',maxDuration:1,captureInterval:1});
  assert.equal(second.captureInterval,1);
- assert.notEqual(second.parentId,started.parentId);
+ assert.notEqual(second.timeline,started.timeline);
  await call('stop_observation');
  assert.equal(JSON.parse(readFileSync(join(second.directory,'session.json'),'utf8')).captureInterval,1);
 });

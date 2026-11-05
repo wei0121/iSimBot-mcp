@@ -1,5 +1,5 @@
 import { defaultOperationSettings, type OperationSettings } from '../setting/operation-settings.js';
-import { createParentId, parentIdPattern, prepareSteps, withRelativeTiming, type OperationRecord, type ParentId } from '../common/operation.js';
+import { createTimeline, timelinePattern, prepareSteps, withRelativeTiming, type OperationRecord, type TimelineId } from '../common/operation.js';
 import { gesturesTools } from './gestures.js';
 import { captureTools } from './capture.js';
 import { screenshotTools } from './screenshot.js';
@@ -56,17 +56,17 @@ export function translateTouches(events: TouchEvent[]): RecordedGesture[] {
   return result.sort((a, b) => a.startedAt - b.startedAt);
 }
 export interface ObservationSnapshot {
-  parentId: string;
-  handshake: { type: 'ready'; parentId: string; protocol: number; bundleId: string; pid?: number };
+  timeline: string;
+  handshake: { type: 'ready'; timeline: string; protocol: number; bundleId: string; pid?: number };
   samples: TouchEvent[];
 }
-export function parseObservationSnapshot(text: string, parentId: string): ObservationSnapshot {
+export function parseObservationSnapshot(text: string, timeline: string): ObservationSnapshot {
   const snapshot = JSON.parse(text);
-  if (!parentIdPattern.test(parentId) || snapshot.parentId !== parentId || !Array.isArray(snapshot.samples)) throw new Error('Observation parentId mismatch or invalid samples.');
+  if (!timelinePattern.test(timeline) || snapshot.timeline !== timeline || !Array.isArray(snapshot.samples)) throw new Error('Observation timeline mismatch or invalid samples.');
   const handshake = snapshot.handshake;
-  if (!handshake || handshake.type !== 'ready' || handshake.parentId !== parentId || handshake.protocol !== 3) throw new Error('Invalid observation handshake/parentId.');
+  if (!handshake || handshake.type !== 'ready' || handshake.timeline !== timeline || handshake.protocol !== 4) throw new Error('Invalid observation handshake/timeline.');
   for (const e of snapshot.samples) {
-    if (e.parentId !== parentId) throw new Error('Observation event parentId mismatch.');
+    if (e.timeline !== timeline) throw new Error('Observation event timeline mismatch.');
     if (e.type === 'limit') throw new Error('Native touch event limit reached (100000 events).');
     if (e.type !== 'touch' || !Number.isFinite(e.time) || !Array.isArray(e.touches) || e.touches.length > 20 ||
       !e.touches.every((t: TouchPoint) => typeof t.id === 'string' && [0, 1, 2, 3, 4].includes(t.phase) &&
@@ -81,29 +81,29 @@ export interface ObservationEvent extends OperationRecord {
   index?: number;
   error?: string;
 }
-export function observationEvents(gestures: RecordedGesture[], captures: Array<{type: 'capture'; index: number; startedAt: number; endedAt: number; error?: string}>, parentId: ParentId, startedAt: number): ObservationEvent[] {
+export function observationEvents(gestures: RecordedGesture[], captures: Array<{type: 'capture'; index: number; startedAt: number; endedAt: number; error?: string}>, timeline: TimelineId, startedAt: number): ObservationEvent[] {
   const entries = [
     ...gestures.map(({ type, tool, arguments: args, ...gesture }) => ({ ...gesture, tool: type === 'operation' ? tool! : 'unsupported', arguments: args ?? {} })),
     ...captures.map(({ type, ...frame }) => ({ ...frame, tool: 'capture', arguments: {} })),
   ];
-  return withRelativeTiming(entries, parentId, startedAt);
+  return withRelativeTiming(entries, timeline, startedAt);
 }
 export function operationChain(source: RecordedGesture[] | OperationRecord[], origin?: number, timing: OperationSettings = defaultOperationSettings) {
-  const parentId = createParentId('chain');
+  const timeline = createTimeline('chain');
   const records: OperationRecord[] = source.length && 'startedAt' in source[0]
-    ? observationEvents(source as RecordedGesture[], [], createParentId('session'), origin ?? (source[0] as RecordedGesture).startedAt)
+    ? observationEvents(source as RecordedGesture[], [], createTimeline('session'), origin ?? (source[0] as RecordedGesture).startedAt)
     : source as OperationRecord[];
   let previousStart = 0;
   const steps = records.filter(record => record.tool !== 'unsupported').map(record => {
     const delay = record.time - previousStart;
     previousStart = record.time;
-    return { parentId, tool: record.tool, arguments: record.arguments, delay, time: record.time, duration: record.duration };
+    return { timeline, tool: record.tool, arguments: record.arguments, delay, time: record.time, duration: record.duration };
   });
   let error: string | undefined;
   try {
     if (source.length !== steps.length) throw new Error('Unsupported observations cannot be replayed.');
-    prepareSteps(steps, [...gesturesTools, ...captureTools, ...screenshotTools], parentId, timing);
+    prepareSteps(steps, [...gesturesTools, ...captureTools, ...screenshotTools], timeline, timing);
   } catch (failure) { error = (failure as Error).message; }
-  return { parentId, steps, replayable: !error, ...(error ? { error } : {}),
+  return { timeline, steps, replayable: !error, ...(error ? { error } : {}),
     note: 'Candidate replay only. delay is start-to-start, duration never adds to delay. Backend timing and trajectories may differ. Unsupported operations or limits require adaptation; overlapping non-image commands fail at execution.' };
 }

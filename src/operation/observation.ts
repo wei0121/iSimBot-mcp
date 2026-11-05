@@ -1,7 +1,7 @@
 import { readOperationSettings } from '../setting/operation-settings.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createParentId, parentIdPattern, type ParentId } from '../common/operation.js';
+import { createTimeline, timelinePattern, type TimelineId } from '../common/operation.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, utimesSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +23,7 @@ async function simctl(args: string[], env?: NodeJS.ProcessEnv) {
 }
 interface Frame { type: 'capture'; index: number; startedAt: number; endedAt: number; error?: string }
 class Observation {
-  readonly parentId: ParentId;
+  readonly timeline: TimelineId;
   readonly directory: string;
   active = false;
   private source = '';
@@ -45,16 +45,16 @@ class Observation {
   constructor(readonly client: IDBClient, readonly settings: ScreenshotSettingsStore, readonly bundleId: string,
     readonly maxDuration: number, readonly interval: number) {
     const root = join(dirname(settings.path), 'observations');
-    do { this.parentId = createParentId('session'); } while (existsSync(join(root, this.parentId)));
-    this.directory = join(root, this.parentId);
+    do { this.timeline = createTimeline('session'); } while (existsSync(join(root, this.timeline)));
+    this.directory = join(root, this.timeline);
   }
   private save() {
     const signature = `${this.raw.length}:${this.captures.map(c => c.index).join(',')}:${this.active}:${this.failure}`;
     if (signature === this.savedSignature) return;
-    writeFileSync(join(this.directory, 'session.json.tmp'), JSON.stringify({ parentId: this.parentId,
+    writeFileSync(join(this.directory, 'session.json.tmp'), JSON.stringify({ timeline: this.timeline,
       udid: this.client.getConnectedDevice(), bundleId: this.bundleId, startedAt: this.startedAt,
       active: this.active, captureInterval: this.interval, handshake: this.snapshot?.handshake,
-      events: observationEvents(translateTouches(this.snapshot?.samples ?? []), this.captures, this.parentId, this.startedAt), ...(this.failure ? { error: this.failure } : {}) }), { mode: 0o600 });
+      events: observationEvents(translateTouches(this.snapshot?.samples ?? []), this.captures, this.timeline, this.startedAt), ...(this.failure ? { error: this.failure } : {}) }), { mode: 0o600 });
     renameSync(join(this.directory, 'session.json.tmp'), join(this.directory, 'session.json'));
     this.savedSignature = signature;
   }
@@ -65,7 +65,7 @@ class Observation {
       if (size === this.sourceSize) return;
       if (size > 16 * 1024 * 1024) throw new Error('Observation event limit reached (16 MB).');
       const raw = readFileSync(path, 'utf8');
-      const snapshot = parseObservationSnapshot(raw, this.parentId);
+      const snapshot = parseObservationSnapshot(raw, this.timeline);
       this.raw = raw; this.snapshot = snapshot;
       this.sourceSize = size;
       this.sawTouch ||= snapshot.samples.length > 0;
@@ -80,7 +80,7 @@ class Observation {
     const { stdout } = await simctl(['get_app_container', udid, this.bundleId, 'data']);
     const container = stdout.trim();
     if (!container.startsWith('/')) throw new Error('Invalid app data container.');
-    this.source = join(container, 'tmp', `isimbot-observation-${this.parentId}`);
+    this.source = join(container, 'tmp', `isimbot-observation-${this.timeline}`);
     mkdirSync(this.source, { recursive: true, mode: 0o700 });
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
     writeFileSync(join(this.source, 'active'), '', { mode: 0o600 });
@@ -89,7 +89,7 @@ class Observation {
       await simctl(['terminate', udid, this.bundleId]).catch(() => {});
       this.startedAt = Date.now();
       await simctl(['launch', udid, this.bundleId], { ...process.env,
-        SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: resolve(library), SIMCTL_CHILD_ISIMBOT_OBSERVATION_PARENT_ID: this.parentId });
+        SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: resolve(library), SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE: this.timeline });
       const until = Date.now() + 8000;
       let ready = false;
       while (Date.now() < until) {
@@ -112,7 +112,7 @@ class Observation {
       throw error;
     }
   }
-  status() { return { success: !this.failure, parentId: this.parentId, deviceId: this.client.getConnectedDevice(),
+  status() { return { success: !this.failure, timeline: this.timeline, deviceId: this.client.getConnectedDevice(),
     bundleId: this.bundleId, captureInterval: this.interval, active: this.active, captureCount: this.captures.length, directory: this.directory,
     ...(this.failure ? { error: this.failure, recoveryPath: this.source } : {}),
     scope: 'Experimental app-local touch recording. Restarts the app. No keyboard text, system dialogs or other apps. Includes both human and automation-generated touches; cannot distinguish their origin. Coordinates are device logical points.' }; }
@@ -176,7 +176,7 @@ class Observation {
     return this.status();
   }
 }
-const parentProperty = { type: 'string', description: 'session_xxxxxxxx parentId returned by start_observation. Stored sessions survive MCP restarts.' };
+const timelineProperty = { type: 'string', description: 'session_xxxxxxxx timeline returned by start_observation. Stored sessions survive MCP restarts.' };
 export const observationTools: ToolDefinition[] = [
   { definition: { name: 'start_observation', description: 'EXPERIMENTAL: restart an installed simulator app with an in-process touch recorder. No host input monitoring. Records app-local touches and background logical capture at per-session captureInterval (default 0.5 seconds); reads may take longer. Before first touch retain only latest 2 captures. Stops at maxDuration/200 captures/100MB. Does not record keyboard text, system dialogs or other apps. Native framework must be built. App compatibility is not guaranteed.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {
@@ -192,19 +192,19 @@ export const observationTools: ToolDefinition[] = [
     inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     async execute(client) { return await stopClientObservation(client) ?? { success: true, active: false }; } },
   { definition: { name: 'get_observation', description: 'Read a saved observation: paginated timeline, raw touch paths and candidate operation_chain. Includes at most 2 capture images when includeImages=true. Candidate replay is approximate; unsupported/multitouch gestures remain explicitly marked. Historical screenshot IDs are not valid coordinate references; use logical points.',
-    inputSchema: { type: 'object', additionalProperties: false, properties: { parentId: parentProperty,
+    inputSchema: { type: 'object', additionalProperties: false, properties: { timeline: timelineProperty,
       offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 20, default: 10 },
-      includeImages: { type: 'boolean', default: false } }, required: ['parentId'] } }, responseType: 'mcp',
+      includeImages: { type: 'boolean', default: false } }, required: ['timeline'] } }, responseType: 'mcp',
     async execute(client, args, settings): Promise<CallToolResult> {
-      const id = args.parentId as string;
-      if (!parentIdPattern.test(id) || !id.startsWith('session_')) throw new Error('Invalid parentId.');
+      const id = args.timeline as string;
+      if (!timelinePattern.test(id) || !id.startsWith('session_')) throw new Error('Invalid timeline.');
       const dir = join(dirname(settings.path), 'observations', id);
       const metadata = JSON.parse(readFileSync(join(dir, 'session.json'), 'utf8'));
       if (metadata.udid !== client.getConnectedDevice()) throw new Error('Observation belongs to a different device. Supply its deviceId.');
-      if (metadata.parentId !== id || !Array.isArray(metadata.events) || metadata.events.some((e: {parentId: string}) => e.parentId !== id)) throw new Error('Saved observation parentId mismatch.');
-      const timeline = metadata.events as ReturnType<typeof observationEvents>;
+      if (metadata.timeline !== id || !Array.isArray(metadata.events) || metadata.events.some((e: {timeline: string}) => e.timeline !== id)) throw new Error('Saved observation timeline mismatch.');
+      const recordedEvents = metadata.events as ReturnType<typeof observationEvents>;
       const offset = args.offset as number ?? 0, limit = args.limit as number ?? 10;
-      const page = timeline.slice(offset, offset + limit);
+      const page = recordedEvents.slice(offset, offset + limit);
       const content: CallToolResult['content'] = [];
       let images = 0;
       const events = page.map(entry => {
@@ -217,10 +217,10 @@ export const observationTools: ToolDefinition[] = [
         }
         return { ...entry, metadata: capture.structuredContent };
       });
-      const summary = { success: true, parentId: id, bundleId: metadata.bundleId, captureInterval: metadata.captureInterval, handshake: metadata.handshake, udid: metadata.udid,
-        active: sessions.get(client)?.parentId === id && sessions.get(client)!.active,
-        interrupted: metadata.active && sessions.get(client)?.parentId !== id,
-        error: metadata.error, totalEntries: timeline.length, offset, nextOffset: offset + page.length < timeline.length ? offset + page.length : null,
+      const summary = { success: true, timeline: id, bundleId: metadata.bundleId, captureInterval: metadata.captureInterval, handshake: metadata.handshake, udid: metadata.udid,
+        active: sessions.get(client)?.timeline === id && sessions.get(client)!.active,
+        interrupted: metadata.active && sessions.get(client)?.timeline !== id,
+        error: metadata.error, totalEntries: recordedEvents.length, offset, nextOffset: offset + page.length < recordedEvents.length ? offset + page.length : null,
         events, operationChain: { ...operationChain(page, undefined, readOperationSettings(settings)), scope: 'Steps in this page only; first delay equals the first step time relative to session start. Other delays are recomputed between retained starts.' } };
       return { content: [{ type: 'text', text: JSON.stringify(summary) }, ...content], structuredContent: summary };
     } },

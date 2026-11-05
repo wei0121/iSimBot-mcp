@@ -7,7 +7,7 @@
 // Original implementation: observes events inside the explicitly launched app.
 // No host input monitoring, Bonjour, keyboard interception or text collection.
 static NSString *leasePath;
-static NSString *parentId;
+static NSString *timeline;
 static NSString *snapshotPath;
 static BOOL observing;
 static NSTimeInterval wallClockOffset;
@@ -18,17 +18,17 @@ static NSDictionary *handshake;
 static BOOL dirty;
 static void flushSnapshot(void) {
     if (!dirty) return;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"parentId": parentId, @"handshake": handshake ?: @{}, @"samples": samples} options:0 error:nil];
+    NSData *data = [NSJSONSerialization dataWithJSONObject:@{@"timeline": timeline, @"handshake": handshake ?: @{}, @"samples": samples} options:0 error:nil];
     if (data) [data writeToFile:snapshotPath options:NSDataWritingAtomic error:nil];
     dirty = NO;
 }
 static void emit(NSDictionary *value) {
     NSMutableDictionary *message = [value mutableCopy];
-    message[@"parentId"] = parentId;
+    message[@"timeline"] = timeline;
     dispatch_async(writer, ^{
         if ([message[@"type"] isEqual:@"ready"]) handshake = message;
         else if (samples.count < 100000) [samples addObject:message];
-        else if (samples.count == 100000) [samples addObject:@{@"type": @"limit", @"parentId": parentId}];
+        else if (samples.count == 100000) [samples addObject:@{@"type": @"limit", @"timeline": timeline}];
         dirty = YES;
     });
 }
@@ -74,12 +74,12 @@ static void emit(NSDictionary *value) {
 }
 + (void)load {
     @autoreleasepool {
-        NSString *session = NSProcessInfo.processInfo.environment[@"ISIMBOT_OBSERVATION_PARENT_ID"];
+        NSString *session = NSProcessInfo.processInfo.environment[@"ISIMBOT_OBSERVATION_TIMELINE"];
         if (!session || session.length != 16 || ![session hasPrefix:@"session_"] || [[session substringFromIndex:8] rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location != NSNotFound) return;
         NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:[@"isimbot-observation-" stringByAppendingString:session]];
         leasePath = [directory stringByAppendingPathComponent:@"active"];
         if (![[NSFileManager defaultManager] fileExistsAtPath:leasePath]) return;
-        parentId = session;
+        timeline = session;
         snapshotPath = [directory stringByAppendingPathComponent:@"samples.json"];
         if ([[NSFileManager defaultManager] fileExistsAtPath:snapshotPath]) return;
         observing = YES;
@@ -93,7 +93,7 @@ static void emit(NSDictionary *value) {
         Method original = class_getInstanceMethod(self, @selector(sendEvent:));
         Method observer = class_getInstanceMethod(self, @selector(isimbot_observation_sendEvent:));
         method_exchangeImplementations(original, observer);
-        emit(@{@"type": @"ready", @"time": @([NSDate date].timeIntervalSince1970 * 1000), @"protocol": @3,
+        emit(@{@"type": @"ready", @"time": @([NSDate date].timeIntervalSince1970 * 1000), @"protocol": @4,
             @"bundleId": NSBundle.mainBundle.bundleIdentifier ?: @"", @"pid": @(getpid())});
     }
 }
