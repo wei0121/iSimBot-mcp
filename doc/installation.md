@@ -108,6 +108,7 @@ directory containing `.claude.json`.
 | Task | Brew | Local (from checkout) |
 | --- | --- | --- |
 | Check setup | `isimbot doctor` | `./scripts/isimbot-local doctor` |
+| Clear caches | `isimbot clean` | `./scripts/isimbot-local clean` |
 | Update | `brew upgrade wei0121/tap/isimbot-mcp` | Update source, then `./scripts/local-setup.sh` |
 | Rebuild after edits | — | `./scripts/local-npm run build` |
 | Run tests | — | `./scripts/local-npm test` |
@@ -117,5 +118,10 @@ update the local command path in your client config.
 
 Uninstall brew with `brew uninstall isimbot-mcp`. To remove the local environment,
 delete `.runtime/` from the checkout. Client config entries are removed separately.
+
+`clean` removes managed screenshots and, for local installations, private download/npm
+cache files. It preserves configuration, installed runtimes, recordings, observation
+sessions, pending screenshots and custom files. Symbolic links are skipped. Local
+and Homebrew installations clean only their own storage; global caches are untouched.
 
 Continue with [MCP operations](mcp_operation.md).

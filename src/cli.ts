@@ -1,3 +1,4 @@
+import { cleanCache } from './storage/clean-cache.js';
 import { setup } from './setting/client-config.js';
 import { doctor } from './diagnostics/doctor.js';
 import { version } from './version.js';
@@ -18,6 +19,10 @@ export async function runCli(args: string[]): Promise<number | undefined> {
     isimbot --help     Show help
     isimbot doctor     Check local dependencies and configuration (read-only)
     isimbot setup      Choose Claude Code or Codex and add MCP configuration
+    isimbot clean      Clear managed screenshot and local download/npm caches
+
+  clean preserves settings, installed runtimes, recordings, observation sessions,
+  pending screenshots, custom files and symbolic links.
 
   Configuration removal is intentionally not supported.`);
           break;
@@ -25,6 +30,11 @@ export async function runCli(args: string[]): Promise<number | undefined> {
         case '-v': console.log(version); break;
         case 'doctor': exitCode = await doctor() ? 0 : 1; break;
         case 'setup': await setup(); break;
+        case 'clean': {
+          const result = cleanCache();
+          console.log(`Cache cleared: ${result.deletedFiles} files, ${result.freedBytes} bytes freed. Skipped ${result.skippedEntries} pending/custom/link entries.`);
+          break;
+        }
         default: throw new Error(`Unknown command: ${args[0]}. Run isimbot --help.`);
       }
     } catch (error) {

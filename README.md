@@ -29,6 +29,12 @@ Check dependencies and registration with:
 isimbot doctor
 ```
 
+Clear caches with:
+
+```bash
+isimbot clean
+```
+
 ### Manual configuration
 
 **Claude Code** — add to `~/.claude.json`:
