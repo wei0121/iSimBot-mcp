@@ -1,5 +1,11 @@
 # iSimBot-MCP changelog
 
+## 1.0.8
+
+- Fix `double_tap` by sending both taps in one timed idb HID request. Separate CLI processes added startup/connection delays and could produce two single taps instead of a system-recognized double tap.
+- Apply the same fix in operation chains. Observation continues to use UIKit tap counts, preserving independent single taps rather than merging them heuristically.
+- Add a regression check for a single device-targeted multi-tap request and no fallback/retry after failure.
+
 ## 1.0.7
 
 - Add experimental app observation with `start_observation`, `stop_observation` and `get_observation`: record taps, double taps, long presses, swipes and scrolls alongside logical captures and accessibility elements.

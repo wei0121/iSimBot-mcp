@@ -202,7 +202,8 @@ the protocol-v4 handshake carry `timeline`. Events use `tool` values `tap`,
 the app's temporary directory, removed after successful finalization.
 `captureInterval` is independent per session (0.5–10 seconds, default 0.5).
 
-Double taps require UIKit `tapCount == 2`, a preceding tap within 0.5 seconds
+The `double_tap` tool sends both taps in one timed idb request, avoiding CLI
+startup delays between touches. Observation double taps require UIKit `tapCount == 2`, a preceding tap within 0.5 seconds
 and a separation of at most 20 logical points. Nearby independent taps remain
 separate. Movement in an enabled ancestor `UIScrollView` whose pan recognizer
 actively handles the gesture is `scroll`; other movement is `swipe`. Custom
