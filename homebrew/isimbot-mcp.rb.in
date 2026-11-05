@@ -99,6 +99,7 @@ class IsimbotMcp < Formula
       system node/"bin/node", npm, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"
     end
     libexec.install "dist", "node_modules", "package.json", "package-lock.json"
+    odie "Observation framework missing from release" unless (libexec/"dist/native/isimbot-observer.dylib").exist?
     chmod 0755, libexec/"dist/index.js"
 
     # Keep runtime binaries and licenses; discard build/install tools and documentation.
@@ -156,6 +157,8 @@ class IsimbotMcp < Formula
     assert_match "build_date", shell_output("#{libexec}/idb-companion/idb_companion --version")
     assert_match version.to_s, shell_output("#{bin}/isimbot --version")
     assert_match "isimbot setup", shell_output("#{bin}/isimbot --help")
+    assert_path_exists libexec/"dist/native/isimbot-observer.dylib"
+    system "/usr/bin/lipo", "-verify_arch", "arm64", libexec/"dist/native/isimbot-observer.dylib"
     # Exercise the native image dependency without opening or changing a simulator.
     system libexec/"node/bin/node", "--input-type=module", "-e", <<~JS
       import { createRequire } from 'node:module';
