@@ -175,7 +175,25 @@ relaunch removes the injected framework.
 The handshake confirms recorder loading, not UI readiness; inspect capture or
 accessibility before sending test actions.
 
-Each session stores one `session.json` with an `events` array. Every event and
+`observations/observing.json` and `observations/observations.json` each contain a
+root JSON array of session objects. Active sessions are updated in the first;
+stopped/automatically ended sessions are archived in the second. Session objects
+retain their `timeline`, device/app metadata and `events` array. Capture payloads
+(images, metadata and elements) are embedded in events; there are no per-session
+or per-capture JSON files. Events are sorted stably by `time`. Updates parse the
+JSON into objects, merge under a cross-process lock, then serialize and atomically
+replace the file. File membership indicates state; session objects have no `active` field.
+Archive writes complete before observing entries are removed. Ended sessions cannot
+resume or change; every start creates a new timeline. `get_observation` stops and
+archives a running session before returning its records. Each session stores
+`expireAt` (Unix milliseconds): start time plus `maxDuration`. Every start/get
+checks all observing sessions and stops/archives expired ones, including saved
+sessions left by an earlier MCP process. If final native reads fail, saved data
+is archived with an error rather than discarded.
+If a process is killed while holding the storage lock, the abandoned `.lock`
+needs removal after confirming its owner exited; requests fail safely meanwhile.
+
+Every session has an `events` array. Every event and
 the protocol-v4 handshake carry `timeline`. Events use `tool` values `tap`,
 `double_tap`, `long_press`, `scroll`, `swipe`, `capture` or `unsupported`, with
 `arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in

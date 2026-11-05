@@ -46,6 +46,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { ObservationStore } from '../dist/storage/observation-store.js';
 import { ScreenshotSettingsStore } from '../dist/setting/screenshot-settings.js';
 
 test('observation lease, duplicate start, bounded image retrieval, cross-device isolation and auto-stop', {skip: !existsSync(new URL('../dist/native/isimbot-observer.dylib',import.meta.url))}, async t=>{
@@ -69,6 +70,7 @@ if(args[1]==='launch'){
  t.after(async()=>{await call('stop_observation');process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
  const started=await call('start_observation',{bundleId:'dev.example.test',maxDuration:1});
  assert.equal(started.active,true);
+ assert.ok(started.expireAt > Date.now() && started.expireAt <= Date.now()+1000);
  assert.equal(started.captureInterval,0.5);
  await assert.rejects(call('start_observation',{bundleId:'dev.example.test'}),/already active/);
  const source=join(container,'tmp',readdirSync(join(container,'tmp'))[0]);
@@ -77,7 +79,12 @@ if(args[1]==='launch'){
  assert.equal(existsSync(join(source,'active')),false);
  const result=await call('get_observation',{timeline:started.timeline,includeImages:true});
  assert.equal(result.structuredContent.active,false);
- const saved=JSON.parse(readFileSync(join(started.directory,'session.json'),'utf8'));
+ const history=JSON.parse(readFileSync(join(started.directory,'observations.json'),'utf8'));
+ const saved=history.find(s=>s.timeline===started.timeline);
+ assert.ok(Array.isArray(history));
+ assert.deepEqual(JSON.parse(readFileSync(join(started.directory,'observing.json'),'utf8')),[]);
+ assert.ok(saved.events.some(e=>e.capture?.content.some(c=>c.type==='image')));
+ assert.deepEqual(readdirSync(started.directory).sort(),['observations.json','observing.json']);
  assert.ok(Array.isArray(saved.events));
  assert.ok(saved.events.every(e=>e.timeline===started.timeline && e.tool==='capture'));
  assert.equal(saved.handshake.timeline,started.timeline);
@@ -88,11 +95,31 @@ if(args[1]==='launch'){
  await assert.rejects(tools.find(t=>t.definition.name==='get_observation').execute({getConnectedDevice:()=> 'device-two'},{timeline:started.timeline},settings),/different device/);
  await assert.rejects(call('get_observation',{timeline:'../../escape'}),/Invalid timeline/);
  assert.equal((await call('stop_observation')).active,false);
- const second=await call('start_observation',{bundleId:'dev.example.test',maxDuration:1,captureInterval:1});
+ const store=new ObservationStore(started.directory);
+ const overdue=timeline=>({timeline,udid:'device-one',bundleId:'dev.example.test',startedAt:Date.now()-2000,expireAt:Date.now()-1000,captureInterval:0.5,events:[]});
+ store.save(overdue('session_aaaa1111'),'observing');store.save(overdue('session_bbbb2222'),'observing');
+ const second=await call('start_observation',{bundleId:'dev.example.test',maxDuration:30,captureInterval:1});
  assert.equal(second.captureInterval,1);
+ assert.equal(store.lookup('session_aaaa1111').observing,false);
+ assert.equal(store.lookup('session_bbbb2222').observing,false);
+ store.save(overdue('session_cccc3333'),'observing');
+ await call('get_observation',{timeline:started.timeline});
+ assert.equal(store.lookup('session_cccc3333').observing,false);
+ assert.equal(store.lookup(second.timeline).observing,true);
  assert.notEqual(second.timeline,started.timeline);
+ const completed=await call('get_observation',{timeline:second.timeline});
+ assert.equal(completed.structuredContent.active,false);
+ assert.deepEqual(JSON.parse(readFileSync(join(second.directory,'observing.json'),'utf8')),[]);
+ const archivedBefore=readFileSync(join(second.directory,'observations.json'),'utf8');
  await call('stop_observation');
- assert.equal(JSON.parse(readFileSync(join(second.directory,'session.json'),'utf8')).captureInterval,1);
+ await call('get_observation',{timeline:second.timeline});
+ assert.equal(readFileSync(join(second.directory,'observations.json'),'utf8'),archivedBefore);
+ const third=await call('start_observation',{bundleId:'dev.example.test',maxDuration:30});
+ assert.notEqual(third.timeline,second.timeline);
+ await call('get_observation',{timeline:second.timeline});
+ assert.ok(JSON.parse(readFileSync(join(third.directory,'observing.json'),'utf8')).some(s=>s.timeline===third.timeline));
+ await call('stop_observation');
+ assert.equal(JSON.parse(readFileSync(join(second.directory,'observations.json'),'utf8')).find(s=>s.timeline===second.timeline).captureInterval,1);
 });
 
 test('double tap requires UIKit count, nearby coordinates and timing, preserving interval to next action',()=>{
