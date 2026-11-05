@@ -29,7 +29,7 @@ Check dependencies and registration with:
 isimbot doctor
 ```
 
-Clear caches with:
+Delete saved images and videos with:
 
 ```bash
 isimbot clean

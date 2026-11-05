@@ -19,10 +19,10 @@ export async function runCli(args: string[]): Promise<number | undefined> {
     isimbot --help     Show help
     isimbot doctor     Check local dependencies and configuration (read-only)
     isimbot setup      Choose Claude Code or Codex and add MCP configuration
-    isimbot clean      Clear managed screenshot and local download/npm caches
+    isimbot clean      Delete saved screenshots, completed videos and archived observation images
 
-  clean preserves settings, installed runtimes, recordings, observation sessions,
-  pending screenshots, custom files and symbolic links.
+  clean preserves settings, installed runtimes, download/npm caches, observation JSON,
+  active observation images, pending screenshots, custom paths and symbolic links.
 
   Configuration removal is intentionally not supported.`);
           break;
@@ -32,7 +32,7 @@ export async function runCli(args: string[]): Promise<number | undefined> {
         case 'setup': await setup(); break;
         case 'clean': {
           const result = cleanCache();
-          console.log(`Cache cleared: ${result.deletedFiles} files, ${result.freedBytes} bytes freed. Skipped ${result.skippedEntries} pending/custom/link entries.`);
+          console.log(`Recorded media cleared: ${result.deletedFiles} files, ${result.freedBytes} bytes freed. Skipped ${result.skippedEntries} pending/custom/link entries.`);
           break;
         }
         default: throw new Error(`Unknown command: ${args[0]}. Run isimbot --help.`);

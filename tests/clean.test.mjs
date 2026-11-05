@@ -19,12 +19,12 @@ test('clean removes only completed managed screenshots and preserves user data',
  const preserved=['screenshot.json','screenshots/custom.png','screenshots/.pending-1111.png','recordings/video.mp4','observations/session/session.json'].map(n=>file(join(dir,'config',n)));
  const other=file(join(dir,'formal','screenshots',managed));
  const result=cleanCache(settings);
- assert.deepEqual(result,{deletedFiles:1,freedBytes:5,skippedEntries:2});
+ assert.deepEqual(result,{deletedFiles:1,freedBytes:5,skippedEntries:3});
  assert.equal(existsSync(removed),false);
  for(const path of [...preserved,other])assert.ok(existsSync(path),path);
  assert.equal(cleanCache(settings).deletedFiles,0);
 });
-test('local cleanup clears private cache files while preserving runtimes and symlink targets',t=>{
+test('local cleanup preserves installation and download caches',t=>{
  const {dir,file}=fixture(t), root=join(dir,'.runtime');
  const settings=new ScreenshotSettingsStore(join(root,'state','screenshot.json'));
  file(join(root,'ready'));
@@ -35,8 +35,8 @@ test('local cleanup clears private cache files while preserving runtimes and sym
  symlinkSync(outside,join(root,'cache','linked-file'));
  // Cleanup also works before a configuration/state directory has been created.
  const result=cleanCache(settings);
- assert.equal(result.deletedFiles,1);assert.equal(result.skippedEntries,2);
- assert.equal(existsSync(cached),false);assert.ok(existsSync(installed));assert.equal(readFileSync(outside,'utf8'),'data');
+ assert.equal(result.deletedFiles,0);assert.equal(result.skippedEntries,0);
+ assert.equal(existsSync(cached),true);assert.ok(existsSync(installed));assert.equal(readFileSync(outside,'utf8'),'data');
 });
 test('clean refuses linked config roots and skips linked screenshot directories',t=>{
  const {dir,file}=fixture(t), outside=file(join(dir,'external',managed));
@@ -54,4 +54,26 @@ test('CLI clean uses its configured storage, reports results and is harmless on 
  assert.equal(existsSync(join(dir,'screenshots',managed)),false);assert.equal(readFileSync(join(dir,'screenshot.json'),'utf8'),'{}');
  assert.match(run('clean').stdout,/0 files/);assert.match(run('--help').stdout,/isimbot clean/);
  assert.equal(run('clean','all').status,1);
+});
+
+test('clean deletes completed videos and archived observation images, preserving JSON and active media',t=>{
+ const {dir,file}=fixture(t), settings=new ScreenshotSettingsStore(join(dir,'screenshot.json'));
+ const video=file(join(dir,'recordings','2026-11-05T12-30-00-000Z-11111111-1111-1111-1111-111111111111.mp4'));
+ const archive=file(join(dir,'observations','observations.json'),JSON.stringify([{timeline:'session_11111111',events:[]}]));
+ const observing=file(join(dir,'observations','observing.json'),JSON.stringify([{timeline:'session_22222222',events:[]}]));
+ const image=file(join(dir,'observations','images','session_11111111-capture-000000-0.png'));
+ const active=file(join(dir,'observations','images','session_22222222-capture-000000-0.jpeg'));
+ const unknown=file(join(dir,'observations','images','session_33333333-capture-000000-0.png'));
+ const pending=file(join(dir,'recordings','.pending-video.mp4'));
+ const archiveText=readFileSync(archive,'utf8'), observingText=readFileSync(observing,'utf8');
+ assert.equal(cleanCache(settings).deletedFiles,2);
+ for(const path of [video,image])assert.equal(existsSync(path),false);
+ for(const path of [active,unknown,pending])assert.ok(existsSync(path));
+ assert.equal(readFileSync(archive,'utf8'),archiveText);assert.equal(readFileSync(observing,'utf8'),observingText);
+});
+test('clean cancels before deleting media when observation indices cannot be read safely',t=>{
+ const {dir,file}=fixture(t), settings=new ScreenshotSettingsStore(join(dir,'screenshot.json'));
+ const image=file(join(dir,'screenshots',managed));
+ file(join(dir,'observations','observations.json'),'invalid json');
+ assert.throws(()=>cleanCache(settings));assert.ok(existsSync(image));
 });
