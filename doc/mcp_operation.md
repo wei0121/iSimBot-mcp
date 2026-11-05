@@ -19,7 +19,8 @@ For example: `capture {"deviceId": "iPhone 18 Pro"}`; MCP connects automatically
 and reuses the connection. Boot a stopped simulator with `boot_simulator` first.
 Short IDs remain stable within one MCP session; after restarting, call
 `list_devices` again or use the full UDID. Screenshot `deviceInfo` includes both IDs. Operations on the same
-device run sequentially; different devices can run concurrently.
+device run sequentially; different devices can run concurrently. Inside an operation
+chain, image operations may overlap a running gesture.
 
 ## Apps
 
@@ -69,14 +70,49 @@ without `screenshotId`. Accessibility may not expose every visible element.
 | `setup` | Read or update image settings and screenshot retention; separate from CLI setup. |
 | `operation_chain` | Run a sequence of actions and captures on one device, returning results together. |
 
-Chain `delay` is the wait after the previous operation completes, before the current
-operation. It is optional, defaults to 0.3 seconds, and 0 means no delay.
+Observation events and chain results share this shape:
 
-To inspect animations, follow an action with consecutive `screenshot` steps using
-`delay: 0.1`. Screenshot processing time is additional.
+```json
+{"parentId":"chain_a7k2m9x4","tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"time":1,"delay":1,"duration":0.65}
+```
 
-A failed step stops the remaining steps. Each chain allows up to 20 steps and
-6 combined `screenshot`/`capture` calls.
+`parentId` is `session_xxxxxxxx` or `chain_xxxxxxxx`. All timing uses seconds:
+`time` is this operation's start relative to parent start, `delay` is this start
+minus the previous start (first delay is from parent start), and `duration` is
+this operation's own elapsed time. Duration never adds to delay. Chain duration
+measures tool execution; observed gesture duration measures the touch interval.
+`arguments.duration` remains the requested gesture duration when supported.
+
+For starts `[0, 1, 5, 6]` and durations `[1, 2, 3, 2]`, delays are `[0, 1, 4, 1]`.
+Operation three can still be running when operation four starts.
+
+Chain requests require only `tool`; `arguments` defaults to `{}` and `delay` to
+0.3 seconds. Optional source `time` must agree with cumulative delays. Execution
+assigns a fresh chain parentId and measures actual start times/durations. If the
+backend or event loop is late, actual starts may be later than requested.
+
+`capture`/`screenshot` can run during gestures and alongside other images. Overlapping
+non-image commands fail with `OPERATION_TIME_CONFLICT` instead of being delayed.
+To inspect motion, follow a gesture with image steps at `delay: 0.1`.
+On failure, no further steps are launched; already started operations finish.
+Each chain allows up to 20 steps, 6 image calls, 0–10 seconds per delay and 30
+seconds total delay. Whole-chain device queue ownership is preserved.
+
+Configure per-tool minimum start intervals with MCP `setup`:
+
+```json
+{"minDelay":{"tap":0.4,"double_tap":0.9,"long_press":1.35,"swipe":0.9,"scroll":0.7,"pinch":0.8}}
+```
+
+These defaults reflect local simulator measurements, not guarantees under all loads.
+Partial updates merge and `setup {}` reads them back.
+Values are 0–10 seconds. A minimum belongs to the previous non-image tool;
+intervening captures count toward the elapsed interval but do not reset it.
+Images remain exempt. Long press, swipe and pinch also require their requested
+(or default) duration plus 0.2 seconds. Omitted delays are increased as needed;
+explicit insufficient delays fail with `MIN_OPERATION_DELAY` before any action.
+Actual backend work can take longer, so runtime conflict detection remains.
+Observation timestamps are never changed; replay candidates use the same policy.
 
 ## Recording
 
@@ -109,7 +145,7 @@ incomplete file. Recording status is kept only for the current server session.
 | --- | --- |
 | `start_observation` | Restart an installed app with the recorder. Requires `bundleId`; optional `maxDuration` (default 300 seconds) and `captureInterval` (default 0.5 seconds). |
 | `stop_observation` | Stop collecting; leave the app running. |
-| `get_observation` | Read a `sessionId`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
+| `get_observation` | Read a session `parentId`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
 
 Build the native recorder with `./scripts/local-npm run build:observation`.
 New local installations build it automatically. The release pipeline does not
@@ -123,8 +159,8 @@ are retained as unsupported records instead of guessed commands.
 
 Capture uses logical size and elements. Before the first touch, only the latest
 two captures are retained; afterwards captures continue at the target interval,
-without overlapping reads. Actual start/end timestamps are returned because
-capture may take longer than the interval. Stop limits: 200 retained captures,
+without overlapping reads. Returned timing describes actual capture execution, which may take longer
+than the interval. Stop limits: 200 retained captures,
 100 MB capture data, 16 MB event data, or `maxDuration`. Sessions are saved under
 `observations` beside the configuration file and are not automatically deleted.
 
@@ -140,10 +176,9 @@ The handshake confirms recorder loading, not UI readiness; inspect capture or
 accessibility before sending test actions.
 
 Each session stores one `session.json` with an `events` array. Every event and
-the protocol-v2 handshake carry `sessionId`. Events use `tap`, `double_tap`, `long_press`,
-`scroll`, `swipe`, `capture` or `unsupported`; `time` and `duration` are seconds relative
-to session start. Absolute capture/operation start and end timestamps remain
-available for alignment. Native touch samples use an atomic JSON snapshot in
+the protocol-v3 handshake carry `parentId`. Events use `tool` values `tap`,
+`double_tap`, `long_press`, `scroll`, `swipe`, `capture` or `unsupported`, with
+`arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
 the app's temporary directory, removed after successful finalization.
 `captureInterval` is independent per session (0.5–10 seconds, default 0.5).
 
@@ -153,4 +188,5 @@ separate. Movement in an enabled ancestor `UIScrollView` whose pan recognizer
 actively handles the gesture is `scroll`; other movement is `swipe`. Custom
 scrolling implementations without a `UIScrollView` fall back to `swipe`. Scroll
 direction describes finger movement; replay uses its dominant axis and backend
-default duration. Raw paths/timing remain available.
+default duration. Raw paths/timing remain available. Existing experimental UUID/sessionId records
+use the older schema and are not read by the new parentId API.

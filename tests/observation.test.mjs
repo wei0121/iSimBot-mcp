@@ -4,13 +4,13 @@ import { translateTouches, operationChain, parseObservationSnapshot, observation
 import { tools } from '../dist/mcp/registry.js';
 const event=(time,phase,x=10,y=20,id='one')=>({type:'touch',time,touches:[{id,phase,x,y,touchTime:time/1000,tapCount:1}]});
 
-test('observation preserves actual paths and computes delay after previous touch ends',()=>{
+test('observation preserves actual paths and computes delay between touch starts',()=>{
  const events=[event(1000,0),event(1100,3),event(1900,0),event(2200,1,80,90),event(2500,3,150,200),event(3000,0),event(4000,3)];
  const gestures=translateTouches(events);
  assert.deepEqual(gestures.map(g=>g.tool),['tap','swipe','long_press']);
  assert.equal(gestures[1].points.length,3);
  const chain=operationChain(gestures);
- assert.deepEqual(chain.steps.map(s=>s.delay),[0,0.8,0.5]);
+ assert.deepEqual(chain.steps.map(s=>s.delay),[0,0.9,1.1]);
  assert.equal(chain.steps[1].arguments.duration,0.6);
  assert.equal(chain.steps[2].arguments.duration,1);
  assert.equal(chain.replayable,true);
@@ -22,18 +22,18 @@ test('cancelled, incomplete and multi-touch gestures are never fabricated as tap
  assert.equal(operationChain(gestures).replayable,false);
  assert.equal(operationChain(gestures).steps.length,0);
 });
-test('JSON snapshots validate handshake and every event sessionId; timeline uses semantic types',()=>{
- const sessionId='session-one';
- const snapshot={sessionId,handshake:{type:'ready',protocol:2,sessionId,bundleId:'app.test'},samples:[{...event(1000,0),sessionId},{...event(1100,3),sessionId}]};
- assert.equal(parseObservationSnapshot(JSON.stringify(snapshot),sessionId).samples.length,2);
- for(const bad of [ {...snapshot,sessionId:'other'}, {...snapshot,handshake:{...snapshot.handshake,sessionId:'other'}}, {...snapshot,samples:[{...snapshot.samples[0],sessionId:'other'}]} ]) assert.throws(()=>parseObservationSnapshot(JSON.stringify(bad),sessionId),/sessionId/);
- assert.throws(()=>parseObservationSnapshot(JSON.stringify(snapshot).slice(0,-1),sessionId));
- const timeline=observationEvents(translateTouches(snapshot.samples),[{type:'capture',index:0,startedAt:900,endedAt:950}],sessionId,500);
- assert.deepEqual(timeline.map(e=>e.type),['capture','tap']);
+test('JSON snapshots validate handshake and every event parentId; timeline uses semantic types',()=>{
+ const parentId='session_aabbccdd';
+ const snapshot={parentId,handshake:{type:'ready',protocol:3,parentId,bundleId:'app.test'},samples:[{...event(1000,0),parentId},{...event(1100,3),parentId}]};
+ assert.equal(parseObservationSnapshot(JSON.stringify(snapshot),parentId).samples.length,2);
+ for(const bad of [ {...snapshot,parentId:'other'}, {...snapshot,handshake:{...snapshot.handshake,parentId:'other'}}, {...snapshot,samples:[{...snapshot.samples[0],parentId:'other'}]} ]) assert.throws(()=>parseObservationSnapshot(JSON.stringify(bad),parentId),/parentId/);
+ assert.throws(()=>parseObservationSnapshot(JSON.stringify(snapshot).slice(0,-1),parentId));
+ const timeline=observationEvents(translateTouches(snapshot.samples),[{type:'capture',index:0,startedAt:900,endedAt:950}],parentId,500);
+ assert.deepEqual(timeline.map(e=>e.tool),['capture','tap']);
  assert.deepEqual(timeline.map(e=>e.time),[0.4,0.5]);
- assert.ok(timeline.every(e=>e.sessionId===sessionId));
+ assert.ok(timeline.every(e=>e.parentId===parentId));
  const chain=operationChain(translateTouches([event(0,0),event(100,3),event(20000,0),event(20100,3)]));
- assert.equal(chain.steps[1].delay,19.9);assert.equal(chain.replayable,false);
+ assert.equal(chain.steps[1].delay,20);assert.equal(chain.replayable,false);
 });
 test('observation tools validate input and cannot be embedded in operation_chain',async()=>{
  const start=tools.find(t=>t.definition.name==='start_observation');
@@ -57,9 +57,9 @@ const fs=require('node:fs');const path=require('node:path');
 const args=process.argv.slice(2);
 if(args[1]==='get_app_container')process.stdout.write(${JSON.stringify(container)});
 if(args[1]==='launch'){
- const folder=path.join(${JSON.stringify(container)},'tmp','isimbot-observation-'+process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_SESSION);
- const sessionId=process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_SESSION;
- fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({sessionId,handshake:{type:'ready',sessionId,protocol:2,bundleId:args[3],time:Date.now()},samples:[]}));
+ const folder=path.join(${JSON.stringify(container)},'tmp','isimbot-observation-'+process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_PARENT_ID);
+ const parentId=process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_PARENT_ID;
+ fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({parentId,handshake:{type:'ready',parentId,protocol:3,bundleId:args[3],time:Date.now()},samples:[]}));
 }
 `,{mode:0o755});
  process.env.PATH=`${dir}:${oldPath}`;
@@ -75,22 +75,22 @@ if(args[1]==='launch'){
  assert.equal(existsSync(join(source,'active')),true);
  await new Promise(r=>setTimeout(r,1400));
  assert.equal(existsSync(join(source,'active')),false);
- const result=await call('get_observation',{sessionId:started.sessionId,includeImages:true});
+ const result=await call('get_observation',{parentId:started.parentId,includeImages:true});
  assert.equal(result.structuredContent.active,false);
  const saved=JSON.parse(readFileSync(join(started.directory,'session.json'),'utf8'));
  assert.ok(Array.isArray(saved.events));
- assert.ok(saved.events.every(e=>e.sessionId===started.sessionId && e.type==='capture'));
- assert.equal(saved.handshake.sessionId,started.sessionId);
+ assert.ok(saved.events.every(e=>e.parentId===started.parentId && e.tool==='capture'));
+ assert.equal(saved.handshake.parentId,started.parentId);
  assert.equal(existsSync(join(started.directory,'events.jsonl')),false);
  assert.ok(Array.isArray(result.structuredContent.events));
  assert.ok(result.content.some(c=>c.type==='image'));
  assert.ok(result.content.filter(c=>c.type==='image').length<=2);
- await assert.rejects(tools.find(t=>t.definition.name==='get_observation').execute({getConnectedDevice:()=> 'device-two'},{sessionId:started.sessionId},settings),/different device/);
- await assert.rejects(call('get_observation',{sessionId:'../../escape'}),/Invalid sessionId/);
+ await assert.rejects(tools.find(t=>t.definition.name==='get_observation').execute({getConnectedDevice:()=> 'device-two'},{parentId:started.parentId},settings),/different device/);
+ await assert.rejects(call('get_observation',{parentId:'../../escape'}),/Invalid parentId/);
  assert.equal((await call('stop_observation')).active,false);
  const second=await call('start_observation',{bundleId:'dev.example.test',maxDuration:1,captureInterval:1});
  assert.equal(second.captureInterval,1);
- assert.notEqual(second.sessionId,started.sessionId);
+ assert.notEqual(second.parentId,started.parentId);
  await call('stop_observation');
  assert.equal(JSON.parse(readFileSync(join(second.directory,'session.json'),'utf8')).captureInterval,1);
 });
@@ -101,7 +101,7 @@ test('double tap requires UIKit count, nearby coordinates and timing, preserving
  const recorded=translateTouches([...double,event(1000,0),event(1100,3)]);
  assert.deepEqual(recorded.map(g=>g.tool),['double_tap','tap']);
  assert.equal(recorded[0].startedAt,0);assert.equal(recorded[0].endedAt,280);
- assert.equal(operationChain(recorded).steps[1].delay,0.72);
+ assert.equal(operationChain(recorded).steps[1].delay,1);
  const independent=structuredClone(double);independent[3].touches[0].tapCount=1;
  assert.deepEqual(translateTouches(independent).map(g=>g.tool),['tap','tap']);
  const distant=structuredClone(double);distant[2].touches[0].x=100;distant[3].touches[0].x=100;
