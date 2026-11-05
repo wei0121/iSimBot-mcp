@@ -96,9 +96,14 @@ export class IDBClient {
 
   async doubleTap(x: number, y: number): Promise<void> {
     if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
-    await this.sendTap(x, y, 0.1);
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await this.sendTap(x, y, 0.1);
+    try {
+      // One HID stream keeps the inter-tap pause on the companion; separate CLI
+      // processes add startup/connection latency and can become two single taps.
+      await run('idb', ['ui', 'multi-tap', '--udid', this.udid, '--count', 2,
+        '--duration', 0.1, '--pause', 0.1, '--', x, y], { timeout: 10000 });
+    } catch (error) {
+      throw new Error(`Failed to double tap at (${x}, ${y}): ${(error as Error).message}`);
+    }
   }
 
   async longPress(x: number, y: number, duration: number = 1.0): Promise<void> {

@@ -16,15 +16,13 @@ test('scroll starts exactly at supplied point and moves in all four directions',
   await client.scroll(100, 300, 'up', 50);
   assert.deepEqual(calls.at(-1), [100, 300, 100, 250, 0.3]);
 });
-test('single/double taps use fixed presses; long press preserves duration and default', async () => {
+test('single tap uses a fixed press; long press preserves duration and default', async () => {
   const client = new IDBClient();
   const calls = [];
   client.udid = 'test';
   client.sendTap = async (...args) => calls.push(args);
   await client.tap(1, 2);
   assert.deepEqual(calls.splice(0), [[1, 2, 0.1]]);
-  await client.doubleTap(3, 4);
-  assert.deepEqual(calls.splice(0), [[3, 4, 0.1], [3, 4, 0.1]]);
   await client.longPress(5, 6);
   await client.longPress(5, 6, 2);
   assert.deepEqual(calls, [[5, 6, 1], [5, 6, 2]]);
@@ -34,4 +32,29 @@ test('gesture calls reject obsolete parameters and missing scroll coordinates be
   const scroll = gesturesTools.find(t => t.definition.name === 'scroll');
   await assert.rejects(tap.execute({}, { x: 1, y: 2, duration: 1 }, {}), /duration/);
   await assert.rejects(scroll.execute({}, { direction: 'up' }, {}), /x1/);
+});
+
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('double tap sends one timed HID request; failures do not retry with separate taps', async t => {
+  const dir=mkdtempSync(join(tmpdir(),'isimbot-double-tap-')), log=join(dir,'calls');
+  const oldPath=process.env.PATH;
+  t.after(()=>{process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
+  writeFileSync(join(dir,'idb'),`#!${process.execPath}
+import fs from 'node:fs';
+const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n');
+if(args.includes('failing-device')){console.error('HID request rejected');process.exitCode=1;}
+`,{mode:0o755});
+  process.env.PATH=`${dir}:${oldPath}`;
+  const client=new IDBClient();
+  await assert.rejects(client.doubleTap(3,4),/device/);
+  client.udid='selected-device';await client.doubleTap(3,4);
+  client.udid='failing-device';await assert.rejects(client.doubleTap(3,4),/HID request rejected/);
+  const calls=readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(calls,[
+    ['ui','multi-tap','--udid','selected-device','--count','2','--duration','0.1','--pause','0.1','--','3','4'],
+    ['ui','multi-tap','--udid','failing-device','--count','2','--duration','0.1','--pause','0.1','--','3','4'],
+  ]);
 });
