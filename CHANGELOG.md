@@ -1,5 +1,10 @@
 # iSimBot-MCP changelog
 
+## 1.0.14
+
+- Publish five concise cross-tool usage instructions in the MCP initialize response, available before tool discovery.
+- Verify handshake instructions through the SDK client's `getInstructions()` before loading tools.
+
 ## 1.0.13
 
 - Replace relative event times with Unix-millisecond timestamps across chains, observations and image retrieval; retain second-based delay/duration and compatibility with old observation files.

@@ -15,6 +15,11 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   const client = new Client({ name: 'test', version: '1' });
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
+    // Initialize instructions must be available before deferred tool discovery.
+    const instructions = client.getInstructions();
+    assert.equal(typeof instructions, 'string');
+    assert.equal(instructions.split('\n').length, 5);
+    for (const rule of ['full UDIDs', 'capture element centers', 'verify key steps', 'previous step START', 'get_images']) assert.ok(instructions.includes(rule), rule);
     const listed = (await client.listTools()).tools;
     assert.equal(listed.length, 33);
     for(const [name,key] of [['launch_app','enableTextInput'],['list_apps','installType'],['operation_chain','elementDetail'],['get_observation','elementDetail']]) assert.ok(listed.find(t=>t.name===name).inputSchema.properties[key],`${name}.${key} must be published`);
