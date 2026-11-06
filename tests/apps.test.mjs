@@ -63,7 +63,7 @@ test('launch passes selected UDID before bundle ID and never interprets shell sy
   client.udid = 'chosen-device';
   await client.launchApp(bundleId);
   const calls=readFileSync(log,'utf8').trim().split('\n').map(line=>JSON.parse(line));
-  assert.deepEqual(calls,[['launch','--udid','chosen-device','--foreground-if-running',bundleId],['list-apps','--udid','chosen-device','--json','--fetch-process-state']]);
+  assert.deepEqual(calls,[['list-apps','--udid','chosen-device','--json','--fetch-process-state'],['launch','--udid','chosen-device','--foreground-if-running',bundleId],['list-apps','--udid','chosen-device','--json','--fetch-process-state']]);
 });
 
 test('list_apps defaults to user installation type and supports all/system in direct and chain calls', async () => {

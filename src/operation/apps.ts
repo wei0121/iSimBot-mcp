@@ -53,7 +53,7 @@ export const appsTools: ToolDefinition[] = [
   {
     definition: {
       name: 'launch_app',
-      description: 'Launch an app. enableTextInput:true explicitly restarts it with app-local Unicode/replace/clear support for standard UIKit/SwiftUI editors; does not start Observe. No clipboard or extra permissions. Default launch waits for Running (up to 10s); UI readiness is not guaranteed.',
+      description: 'Launch an app. enableTextInput:true explicitly restarts it with app-local Unicode/replace/clear support for standard UIKit/SwiftUI editors; does not start Observe. No clipboard or extra permissions. Uninstalled bundle IDs return APP_NOT_INSTALLED in both launch modes. Default launch waits for Running (up to 10s); UI readiness is not guaranteed.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -68,6 +68,7 @@ export const appsTools: ToolDefinition[] = [
     },
     async execute(idbClient, args) {
       if (args.enableTextInput) {
+        await idbClient.assertAppInstalled(args.bundleId as string);
         await stopClientObservation(idbClient);
         return launchWithTextInput(idbClient, args.bundleId as string);
       }
@@ -79,7 +80,7 @@ export const appsTools: ToolDefinition[] = [
   {
     definition: {
       name: 'terminate_app',
-      description: 'Request app termination. An uninstalled bundle ID is an error; an already stopped app is a no-op. confirmed:false with terminated:null means the backend accepted termination but did not report a reliable stopped state.',
+      description: 'Request app termination. An uninstalled bundle ID is an error; an already stopped app is a no-op. Simulator termination checks the actual launchd process and polls up to 5 seconds after sending termination once. confirmed:false with terminated:null means the backend accepted termination but did not report a reliable stopped state.',
       inputSchema: {
         type: 'object',
         properties: {

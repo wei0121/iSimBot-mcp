@@ -391,6 +391,11 @@ connected server version and refresh its MCP tool list. These parameters are
 published by the server; restarting a different server process does not refresh
 another client's cached definitions.
 
-`terminate_app` rejects uninstalled bundle IDs. If idb accepts termination but
-reports an unknown process state, the result has `confirmed: false` and
-`terminated: null`; it does not claim the app was confirmed stopped.
+`launch_app` checks installation first in both ordinary and enhanced-input modes.
+A missing app returns `APP_NOT_INSTALLED`; launch failures return concise error
+codes rather than raw system output.
+
+`terminate_app` checks the simulator's actual launchd App process and waits up to
+5 seconds after one termination request. Already-stopped apps are a confirmed
+no-op. Failed process queries remain `confirmed: false`, `terminated: null`;
+a process still running at the deadline returns `APP_STILL_RUNNING`.
