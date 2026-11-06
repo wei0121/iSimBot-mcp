@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseDisplayGeometry, parseHIDRotation, hidPoint, type DisplayGeometry } from '../image/display-geometry.js';
 import { validateOrientation, parseOrientation, type DeviceOrientation } from '../common/device-orientation.js';
 import { ToolError } from '../mcp/tool-error.js';
-import { appIsRunning, waitUntilRunning } from './readiness.js';
+import { appIsRunning, waitUntilRunning, simulatorAppIsRunning } from './readiness.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { resolve } from 'node:path';
@@ -52,7 +52,9 @@ export function parseDevices(stdout: string): Device[] {
     ? JSON.parse(text)
     : text.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
   if (!Array.isArray(parsed)) throw new Error('Invalid device list');
-  return parsed.filter(device => device && typeof device.udid === 'string' && device.udid.trim()).map((device: any) => ({
+  return parsed.filter(device => device && typeof device.udid === 'string' && device.udid.trim() &&
+    !/^(unknown|null|undefined|none|n\/a)$/i.test(device.udid.trim()) &&
+    !/^(mac|macos)$/i.test(String(device.type ?? '').trim())).map((device: any) => ({
     udid: device.udid.trim(), name: device.name, state: device.state,
     type: device.type || 'simulator',
     runtime: typeof device.os_version === 'string' && device.os_version.trim() ? device.os_version.trim() : null,
@@ -457,32 +459,61 @@ export class IDBClient {
     }
   }
 
-  async launchApp(bundleId: string): Promise<void> {
-    if (!this.udid) {
-      throw new Error('No internal device connection. Retry the operation with deviceId.');
-    }
+  async assertAppInstalled(bundleId: string): Promise<void> {
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    safeIdentifier(bundleId);
+    let apps;
+    try { apps = await this.listApps(); }
+    catch { throw new ToolError('Cannot verify installed apps on this device. Check the device with list_devices and retry list_apps.', { code: 'APP_STATUS_UNAVAILABLE', bundleId }); }
+    if (!apps.some(app => app.bundleId === bundleId)) throw new ToolError('App is not installed on this device. Use list_apps with installType:all to check the bundle ID, or install_app first.', { code: 'APP_NOT_INSTALLED', bundleId });
+  }
 
+  async launchApp(bundleId: string): Promise<void> {
+    await this.assertAppInstalled(bundleId);
+    let accepted = false;
     try {
-      await run('idb', ['launch', '--udid', this.udid, '--foreground-if-running', safeIdentifier(bundleId)], { timeout: 10000 });
+      await run('idb', ['launch', '--udid', this.udid!, '--foreground-if-running', safeIdentifier(bundleId)], { timeout: 10000 });
+      accepted = true;
       await waitUntilRunning(async remainingMs => {
         const { stdout } = await run('idb', ['list-apps', '--udid', this.udid!, '--json', '--fetch-process-state'], { timeout: remainingMs });
         return appIsRunning(stdout, bundleId);
       });
-    } catch (error) {
-      throw new Error(`Failed to launch app ${bundleId}: ${(error as Error).message}`);
+    } catch {
+      throw new ToolError(accepted
+        ? 'Launch was requested but the app did not report Running. It may have launched or exited; inspect capture before retrying.'
+        : 'App launch failed. Check the device state and whether this installed app can run on this simulator. No automatic launch retry was performed.',
+      { code: accepted ? 'APP_LAUNCH_NOT_CONFIRMED' : 'APP_LAUNCH_FAILED', bundleId });
     }
   }
 
+  private async appRunning(bundleId: string, timeout = 3000): Promise<boolean | null> {
+    if (this.udid && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(this.udid)) {
+      try {
+        const { stdout } = await run('xcrun', ['simctl', 'spawn', this.udid, 'launchctl', 'list'], { timeout });
+        return simulatorAppIsRunning(stdout, bundleId);
+      } catch { return null; }
+    }
+    try {
+      const app = (await this.listApps()).find(app => app.bundleId === bundleId);
+      if (!app) return false;
+      const state = app.processState?.toLowerCase();
+      return state === 'running' ? true : state === 'not running' ? false : null;
+    } catch { return null; }
+  }
+
   async terminateApp(bundleId: string): Promise<{ terminated: boolean | null; alreadyStopped: boolean; confirmed: boolean }> {
-    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
-    const app = (await this.listApps()).find(app => app.bundleId === bundleId);
-    if (!app) throw new ToolError('App is not installed on this device. Use list_apps with installType:all to check the bundle ID.', { code: 'APP_NOT_INSTALLED', bundleId });
-    if (app.processState?.toLowerCase() === 'not running') return { terminated: false, alreadyStopped: true, confirmed: true };
-    await run('idb', ['terminate', '--udid', this.udid, '--', bundleId], { timeout: 10000 });
-    const remaining = (await this.listApps()).find(app => app.bundleId === bundleId);
-    if (remaining?.processState?.toLowerCase() === 'running') throw new ToolError('Termination request completed but the app is still running. Inspect it before retrying.', { code: 'APP_STILL_RUNNING', bundleId });
-    if (remaining && remaining.processState?.toLowerCase() !== 'not running') return { terminated: null, alreadyStopped: false, confirmed: false };
-    return { terminated: true, alreadyStopped: false, confirmed: true };
+    await this.assertAppInstalled(bundleId);
+    if (await this.appRunning(bundleId) === false) return { terminated: false, alreadyStopped: true, confirmed: true };
+    try { await run('idb', ['terminate', '--udid', this.udid!, '--', bundleId], { timeout: 10000 }); }
+    catch { throw new ToolError('App termination failed. Inspect the app before retrying; the request was not repeated.', { code: 'APP_TERMINATE_FAILED', bundleId }); }
+    const deadline = performance.now() + 5000;
+    while (performance.now() < deadline) {
+      const state = await this.appRunning(bundleId, Math.max(1, Math.min(3000, Math.ceil(deadline - performance.now()))));
+      if (state === false) return { terminated: true, alreadyStopped: false, confirmed: true };
+      if (state === null) return { terminated: null, alreadyStopped: false, confirmed: false };
+      await new Promise(resolve => setTimeout(resolve, Math.min(200, Math.max(0, deadline - performance.now()))));
+    }
+    throw new ToolError('Termination request completed but the app still has a running process after 5 seconds. Inspect it before retrying; termination was sent once.', { code: 'APP_STILL_RUNNING', bundleId });
   }
 
   async uninstallApp(bundleId: string): Promise<void> {

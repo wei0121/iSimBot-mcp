@@ -14,10 +14,13 @@ test('device list accepts real idb JSON lines, legacy arrays, single and empty o
 test('device listings preserve runtime and exclude non-addressable host entries', () => {
   const raw = [{udid:'phone',name:'Phone',state:'Booted',type:'simulator',os_version:'iOS 27.0'},
     {name:'Mac',type:'mac'},{udid:null,name:'Mac'},null,{udid:'  ',name:'Invalid'},
+    {udid:'unknown',name:'Mac',type:'mac'},{udid:' UNKNOWN ',name:'Invalid'},
+    {udid:'host-123',name:'Host',type:'macOS'},{udid:'null',name:'Invalid'},
     {udid:'physical',name:'iPhone',state:'Booted',type:'device',os_version:null}];
   const result=parseDevices(JSON.stringify(raw));
   assert.deepEqual(result.map(d=>[d.udid,d.runtime]),[['phone','iOS 27.0'],['physical',null]]);
   assert.equal(parseDevices(JSON.stringify({...raw[0],os_version:'iOS 26.2'}))[0].runtime,'iOS 26.2');
+  assert.equal(parseDevices(JSON.stringify({udid:'real-sim',name:'Mac',type:'simulator'}))[0].name,'Mac');
 });
 
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';

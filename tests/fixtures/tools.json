@@ -1,7 +1,7 @@
 [
   {
     "name": "list_devices",
-    "description": "List available iOS simulators and devices with boot state, runtime (OS version) and model (actual simulator type, independent of its name). Unknown runtime/model values are null. Entries without a UDID are omitted.",
+    "description": "List available iOS simulators and devices with boot state, runtime (OS version) and model (actual simulator type, independent of its name). Unknown runtime/model values are null. Host Mac entries and missing or placeholder UDIDs (such as unknown) are omitted.",
     "inputSchema": {
       "type": "object",
       "properties": {},
@@ -376,7 +376,7 @@
   },
   {
     "name": "launch_app",
-    "description": "Launch an app. enableTextInput:true explicitly restarts it with app-local Unicode/replace/clear support for standard UIKit/SwiftUI editors; does not start Observe. No clipboard or extra permissions. Default launch waits for Running (up to 10s); UI readiness is not guaranteed.",
+    "description": "Launch an app. enableTextInput:true explicitly restarts it with app-local Unicode/replace/clear support for standard UIKit/SwiftUI editors; does not start Observe. No clipboard or extra permissions. Uninstalled bundle IDs return APP_NOT_INSTALLED in both launch modes. Default launch waits for Running (up to 10s); UI readiness is not guaranteed.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -401,7 +401,7 @@
   },
   {
     "name": "terminate_app",
-    "description": "Request app termination. An uninstalled bundle ID is an error; an already stopped app is a no-op. confirmed:false with terminated:null means the backend accepted termination but did not report a reliable stopped state.",
+    "description": "Request app termination. An uninstalled bundle ID is an error; an already stopped app is a no-op. Simulator termination checks the actual launchd process and polls up to 5 seconds after sending termination once. confirmed:false with terminated:null means the backend accepted termination but did not report a reliable stopped state.",
     "inputSchema": {
       "type": "object",
       "properties": {

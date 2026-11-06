@@ -1,5 +1,11 @@
 # iSimBot-MCP changelog
 
+## Unreleased
+
+- Omit host Mac entries and placeholder device IDs such as `unknown`.
+- Return concise structured errors for missing apps and launch failures in both launch modes.
+- Confirm simulator app termination through launchd instead of relying on idb's `Unknown` state; wait for exit without repeating termination.
+
 ## 1.0.12
 
 - Read bounded simulator unified logs and return actionable app/path/coordinate errors.

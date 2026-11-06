@@ -54,7 +54,7 @@ test('install diagnoses paths and terminate distinguishes missing, stopped and s
  const old=process.env.PATH;writeFileSync(join(dir,'idb'),`#!${process.execPath}\nprocess.exit(0);`,{mode:0o755});process.env.PATH=`${dir}:${old}`;t.after(()=>{process.env.PATH=old});
  client.listApps=async()=>[{bundleId:'app.test',processState:'Running'}];await assert.rejects(client.terminateApp('app.test'),e=>e.details.code==='APP_STILL_RUNNING');
  client.listApps=async()=>[{bundleId:'app.test',processState:null}];assert.deepEqual(await client.terminateApp('app.test'),{terminated:null,alreadyStopped:false,confirmed:false});
- let n=0;client.listApps=async()=>[{bundleId:'app.test',processState:++n===1?'Running':'Not running'}];assert.deepEqual(await client.terminateApp('app.test'),{terminated:true,alreadyStopped:false,confirmed:true});
+ let n=0;client.listApps=async()=>[{bundleId:'app.test',processState:++n<=2?'Running':'Not running'}];assert.deepEqual(await client.terminateApp('app.test'),{terminated:true,alreadyStopped:false,confirmed:true});
 });
 
 test('get_logs uses historical simulator logs, literal process argv, bounded time window and trailing lines',async t=>{

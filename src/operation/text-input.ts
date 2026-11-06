@@ -66,14 +66,19 @@ export async function awaitTextInput(client: IDBClient) {
   throw new ToolError('App did not acknowledge enhanced text input. It may reject injection or have crashed. Relaunch explicitly with enableTextInput:true before retrying.', { code: 'TEXT_INPUT_NOT_READY' });
 }
 export async function launchWithTextInput(client: IDBClient, bundleId: string) {
-  const env = await prepareTextInput(client, bundleId);
+  await client.assertAppInstalled(bundleId);
   try {
+    const env = await prepareTextInput(client, bundleId);
     const udid = client.getConnectedDevice()!;
     await exec('xcrun', ['simctl', 'terminate', udid, bundleId], { timeout: 10000 }).catch(() => {});
     await exec('xcrun', ['simctl', 'launch', udid, bundleId], { env: { ...process.env, ...env }, timeout: 15000 });
     await awaitTextInput(client);
     return { success: true, bundleId, restarted: true, textInput: 'native' };
-  } catch (error) { releaseTextInput(client); throw error; }
+  } catch (error) {
+    releaseTextInput(client);
+    if (error instanceof ToolError) throw error;
+    throw new ToolError('Enhanced app launch failed. Check that the device is booted and the app supports native injection. It may have restarted; inspect the screen before retrying.', { code: 'APP_LAUNCH_FAILED', bundleId });
+  }
 }
 export async function typeIntoFocusedField(client: IDBClient, text: string, mode: 'insert' | 'replace' = 'insert') {
   if (typeof text !== 'string' || !['insert', 'replace'].includes(mode)) throw new Error('Expected text and mode insert or replace.');

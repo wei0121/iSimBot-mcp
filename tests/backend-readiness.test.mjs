@@ -28,7 +28,7 @@ test('backend passes injection strings literally, sends gestures once, and waits
   const attack=`\\$(touch ${marker}); \u0060touch ${marker}\u0060 " ' & |\n--help`;
   await client.connect(attack);
   await client.typeText(attack);
-  let listCalls=0;client.listApps=async()=>[{bundleId:attack,processState:++listCalls===1?'Running':'Not running'}];
+  let listCalls=0;client.listApps=async()=>[{bundleId:attack,processState:++listCalls<=2?'Running':'Not running'}];
   await client.terminateApp(attack);
   await client.uninstallApp(attack);
   const appPath=join(dir,`a \\$(touch INJECTED) "quoted".app`);
