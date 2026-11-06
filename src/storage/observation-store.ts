@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, lstatSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { withDirectoryLock } from './directory-lock.js';
+import { existsSync, lstatSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { timelinePattern } from '../common/operation.js';
+import { timelinePattern, withEventIndexes } from '../common/operation.js';
 import type { ObservationEvent } from '../operation/observation-events.js';
-import type { StoredCapture } from './observation-images.js';
+import type { StoredCapture } from './timeline-images.js';
 
 export interface StoredEvent extends ObservationEvent { capture?: StoredCapture }
 export interface ObservationSession {
@@ -33,24 +34,7 @@ export class ObservationStore {
       renameSync(pending, path);
     } finally { rmSync(pending, { force: true }); }
   }
-  private locked<T>(action: () => T): T {
-    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
-    if (!lstatSync(this.directory).isDirectory()) throw new Error('Observation directory must not be a symbolic link.');
-    const lock = join(this.directory, '.lock');
-    const deadline = Date.now() + 5000;
-    while (true) {
-      try { mkdirSync(lock, { mode: 0o700 }); break; }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        try { if (!lstatSync(lock).isDirectory()) throw new Error('Invalid observation lock.'); }
-        catch (failure) { if ((failure as NodeJS.ErrnoException).code === 'ENOENT') continue; throw failure; }
-        if (Date.now() >= deadline) throw new Error('Observation storage is busy or has an abandoned .lock directory. Retry; if its owner process has exited, remove that lock before retrying.');
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      }
-    }
-    try { writeFileSync(join(lock, 'owner.json'), JSON.stringify({ pid: process.pid }), { mode: 0o600 }); return action(); }
-    finally { rmSync(lock, { recursive: true, force: true }); }
-  }
+  private locked<T>(action: () => T): T { return withDirectoryLock(this.directory, action); }
   expired(now = Date.now()): ObservationSession[] {
     return this.locked(() => this.read(this.observingPath).filter(s => Number.isFinite(s.expireAt) && s.expireAt <= now));
   }
@@ -77,7 +61,7 @@ export class ObservationStore {
         if (current.some(s => s.timeline === session.timeline)) this.write(this.observingPath, current.filter(s => s.timeline !== session.timeline));
         return;
       }
-      const value = { ...session, events: [...session.events].sort((a, b) => a.time - b.time) };
+      const value = { ...session, events: withEventIndexes([...session.events].sort((a, b) => a.time - b.time)) };
       if (state === 'observing') {
         if (!existsSync(this.observationsPath)) this.write(this.observationsPath, history);
         this.write(this.observingPath, [...current.filter(s => s.timeline !== session.timeline), value]);

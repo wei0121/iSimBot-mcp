@@ -8,11 +8,12 @@ Control existing simulators and apps; iSimBot does not build Xcode projects.
 
 | Operation | Description |
 | --- | --- |
-| `list_devices` | List available devices and their boot state. |
+| `list_devices` | List devices, boot state, `runtime` (for example, `iOS 27.0`) and `model` (for example, `iPhone 18 Pro`). Unknown values are `null`. Entries without a UDID are omitted. |
 | `boot_simulator` | Start a simulator and wait for boot completion. |
 | `shutdown_simulator` | Shut down a simulator. |
 
 Device listings include an 8-character `deviceId` and the full `udid`.
+`name` is the editable device name; `model` resolves the actual simulator type by UDID.
 The operation's `deviceId` field accepts either ID or the exact device name.
 Duplicate names are rejected; use a short ID or UDID to disambiguate.
 For example: `capture {"deviceId": "iPhone 18 Pro"}`; MCP connects automatically
@@ -26,7 +27,7 @@ chain, image operations may overlap a running gesture.
 
 | Operation | Description |
 | --- | --- |
-| `list_apps` | List installed apps with bundle ID, name, install type and process state. |
+| `list_apps` | List user-installed apps by default, with bundle ID, name, install type and process state. Use `installType: "all"` for all apps or `"system"` for system apps. |
 | `open_url` | Open a URL or App deep link on the selected device; inspect the destination with `capture`. |
 | `install_app` | Install a simulator `.app` from a local path. |
 | `launch_app` | Launch or foreground an app by bundle ID. |
@@ -73,7 +74,7 @@ without `screenshotId`. Accessibility may not expose every visible element.
 Observation events and chain results share this shape:
 
 ```json
-{"timeline":"chain_a7k2m9x4","tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"time":1,"delay":1,"duration":0.65}
+{"timeline":"chain_a7k2m9x4","index":0,"tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"time":1,"delay":1,"duration":0.65}
 ```
 
 `timeline` is `session_xxxxxxxx` or `chain_xxxxxxxx`. All timing uses seconds:
@@ -97,6 +98,16 @@ To inspect motion, follow a gesture with image steps at `delay: 0.1`.
 On failure, no further steps are launched; already started operations finish.
 Each chain allows up to 20 steps, 6 image calls, 0–10 seconds per delay and 30
 seconds total delay. Whole-chain device queue ownership is preserved.
+
+Top-level `elementDetail` uses the same `number` / `list` / `changes` presentation
+as `get_observation`, defaulting to `changes`. It affects capture step results
+only. Each capture compares with the previous capture in the same chain by
+`index`, regardless of completion order; intervening screenshot/gesture steps do
+not reset the baseline. First capture marks all elements appeared. Changes include
+`comparedToIndex`. Capture images are saved locally and returned as references;
+screenshot steps continue to return image content. Image metadata and execution timing are preserved;
+the option adds no captures or waits. Full snapshots are used internally for
+comparison, rather than previously reduced change lists.
 
 Configure per-tool minimum start intervals with MCP `setup`:
 
@@ -145,7 +156,8 @@ incomplete file. Recording status is kept only for the current server session.
 | --- | --- |
 | `start_observation` | Restart an installed app with the recorder. Requires `bundleId`; optional `maxDuration` (default 300 seconds) and `captureInterval` (default 0.5 seconds). |
 | `stop_observation` | Stop collecting; leave the app running. |
-| `get_observation` | Read a session `timeline`; paginate with `offset` / `limit`. `includeImages: true` returns up to two images per page. |
+| `get_images` | Read saved images by `timeline` and `indexes` (1–6 unique event indexes). No simulator connection needed. |
+| `get_observation` | Read a session `timeline`; paginate with `offset` / `limit` (default and maximum 100 events). `elementDetail` defaults to `"changes"`; `"number"` returns counts and `"list"` returns compact elements. `includeImages: true` returns up to two images per page. |
 
 Homebrew releases include the native recorder. New local installations build it
 automatically; rebuild it after native edits with
@@ -195,12 +207,40 @@ is archived with an error rather than discarded.
 If a process is killed while holding the storage lock, the abandoned `.lock`
 needs removal after confirming its owner exited; requests fail safely meanwhile.
 
-Every session has an `events` array. Every event and
-the protocol-v4 handshake carry `timeline`. Events use `tool` values `tap`,
+Every observation event and chain step has a zero-based `index` in its timeline.
+Observation indexes follow chronological event order across gestures and captures;
+chain indexes follow request order, regardless of concurrent completion order.
+`timeline` + `index` identifies an event; `time` remains its elapsed start time.
+Pagination never restarts numbering. Observing snapshots may be renumbered while
+late touch events arrive; indexes are fixed after stop/archive. Old archives are
+indexed when returned without rewriting the stored data. Internal capture file
+counters are separate and do not determine public event indexes.
+Optional source indexes in chain requests are metadata; a new execution assigns
+fresh indexes from zero. Chain results use `index` instead of the old one-based
+`step` field.
+
+Every session has an `events` array. Internally saved events and
+the protocol-v4 handshake carry `timeline`; public events inherit it from the
+response root. Events use `tool` values `tap`,
 `double_tap`, `long_press`, `scroll`, `swipe`, `capture` or `unsupported`, with
 `arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
 the app's temporary directory, removed after successful finalization.
 `captureInterval` is independent per session (0.5–10 seconds, default 0.5).
+
+`get_observation` changes only the returned presentation. Captures continue at the
+configured interval and saved JSON retains complete accessibility snapshots.
+Compact elements contain `elementId`, `type`, `text` and logical `frame`; `text`
+combines distinct label/title/value strings. Changes add `changeTypes` containing
+`appeared`, `moved` (position or size), `disappeared` or `updated` (content/state).
+Comparison uses the preceding capture in the same session, including before a
+page boundary; `comparedToIndex` identifies its event index. First capture
+marks all elements appeared. Disappeared elements retain their previous data.
+Unique identifiers match across captures; absent/duplicate IDs match only when
+unchanged, otherwise report removal/addition. No pixel comparison is performed.
+Unavailable accessibility snapshots produce `elements: null` with an event-level
+`error`, not false disappearance events. Use `list` to inspect a valid
+current snapshot when its baseline is unavailable.
+
 
 The `double_tap` tool sends both taps in one timed idb request, avoiding CLI
 startup delays between touches. Observation double taps require UIKit `tapCount == 2`, a preceding tap within 0.5 seconds
@@ -211,3 +251,29 @@ scrolling implementations without a `UIScrollView` fall back to `swipe`. Scroll
 direction describes finger movement; replay uses its dominant axis and backend
 default duration. Raw paths/timing remain available. Existing experimental UUID/sessionId records
 use the older schema and are not read by the new timeline API.
+
+## Timeline images and return format
+
+Observation and chain responses use top-level `timeline` and `events`. Public
+events have `index`, `tool`, `arguments`, `time`, `delay` and `duration`, without
+repeating `timeline`. Chain requests still use `steps`. Capture events directly
+contain `images` (file references), `metadata` (image/device information), and
+`elements` or `elementCount`, without a `result` wrapper. `changes` additionally
+returns `comparedToIndex`; no comparison object or availability flag is used.
+
+Standalone `capture` still immediately returns MCP image content and complete
+original accessibility fields, without an elementDetail option. Chain captures
+and observation captures save processed PNG/JPEG images under `chains/images/`
+and `observations/images/` beside the configuration file. Chain capture indexes,
+times and full raw metadata persist in `chains/captures.json`; other chain
+commands are not logged. Ordinary screenshot retention does not delete these
+files. Existing observation JSON keeps its complete original snapshots.
+
+Use `get_images {"timeline":"chain_1234abcd","indexes":[0,2]}` to retrieve selected
+images after completion, including after an MCP restart. Captures in both mode
+return logical and pixel images in that order. A batch returns at most six images
+and 16 MB Base64; missing/cleaned images and indexes exceeding the budget report
+per-index errors while other indexes continue. No arbitrary paths are accepted.
+Historical images do not provide fresh coordinate references. `isimbot clean`
+removes completed chain images as well as archived observation images, preserving
+catalogs, active/uncataloged images, configuration and custom output paths.

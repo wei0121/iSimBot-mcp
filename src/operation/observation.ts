@@ -1,10 +1,11 @@
-import { saveObservationCapture, readObservationCapture, deleteObservationCapture, type StoredCapture } from '../storage/observation-images.js';
+import { presentElements, resolveElementDetail, elementDetailSchema, publicEvent } from '../mcp/element-presentation.js';
+import { saveTimelineCapture, readTimelineCapture, deleteTimelineCapture, type StoredCapture } from '../storage/timeline-images.js';
 import { ObservationStore } from '../storage/observation-store.js';
 import { tmpdir } from 'node:os';
 import { readOperationSettings } from '../setting/operation-settings.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createTimeline, timelinePattern, type TimelineId } from '../common/operation.js';
+import { createTimeline, timelinePattern, withEventIndexes, type TimelineId } from '../common/operation.js';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync, utimesSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +26,7 @@ const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function simctl(args: string[], env?: NodeJS.ProcessEnv) {
   return exec('xcrun', ['simctl', ...args], { env, timeout: 15000, maxBuffer: 1024 * 1024 });
 }
-interface Frame { type: 'capture'; index: number; startedAt: number; endedAt: number; error?: string }
+interface Frame { type: 'capture'; captureIndex: number; startedAt: number; endedAt: number; error?: string }
 class Observation {
   readonly timeline: TimelineId;
   readonly directory: string;
@@ -57,12 +58,12 @@ class Observation {
     this.directory = root;
   }
   private save() {
-    const signature = `${this.raw.length}:${this.captures.map(c => c.index).join(',')}:${this.active}:${this.failure}`;
+    const signature = `${this.raw.length}:${this.captures.map(c => c.captureIndex).join(',')}:${this.active}:${this.failure}`;
     if (signature === this.savedSignature) return;
     this.store.save({ timeline: this.timeline,
       udid: this.client.getConnectedDevice(), bundleId: this.bundleId, startedAt: this.startedAt, expireAt: this.expireAt,
       captureInterval: this.interval, handshake: this.snapshot?.handshake,
-      events: observationEvents(translateTouches(this.snapshot?.samples ?? []), this.captures, this.timeline, this.startedAt).map(event => ({ ...event, ...(event.tool === 'capture' && event.index !== undefined && this.captureData.has(event.index) ? { capture: this.captureData.get(event.index)! } : {}) })), ...(this.failure ? { error: this.failure } : {}) }, this.active ? 'observing' : 'archived');
+      events: observationEvents(translateTouches(this.snapshot?.samples ?? []), this.captures, this.timeline, this.startedAt).map(({ captureIndex, ...event }) => ({ ...event, ...(event.tool === 'capture' && captureIndex !== undefined && this.captureData.has(captureIndex) ? { capture: this.captureData.get(captureIndex)! } : {}) })), ...(this.failure ? { error: this.failure } : {}) }, this.active ? 'observing' : 'archived');
     this.savedSignature = signature;
   }
   private readEvents() {
@@ -143,32 +144,32 @@ class Observation {
       if (!this.active) return;
       if (this.captures.length >= 200) { this.failure = 'Observation capture limit reached (200 records).'; await this.stop(); return; }
       this.lastCapture = Date.now();
-      const frame: Frame = { type: 'capture', index: this.nextCapture++, startedAt: Date.now(), endedAt: 0 };
+      const frame: Frame = { type: 'capture', captureIndex: this.nextCapture++, startedAt: Date.now(), endedAt: 0 };
       try {
-        const png = join(tmpdir(), `isimbot-observation-${this.timeline}-${frame.index}.png`);
+        const png = join(tmpdir(), `isimbot-observation-${this.timeline}-${frame.captureIndex}.png`);
         const result = await captureTools[0].execute(this.client, { path: png, mode: 'logical', maxBytes: 2_000_000 }, this.settings) as CallToolResult;
         rmSync(png, { force: true });
         this.readEvents();
         if (!this.active) return;
         const size = result.content.reduce((sum, c) => sum + (c.type === 'image' ? Buffer.from(c.data, 'base64').length : 0), 0);
         if (this.bytes + size > 100 * 1024 * 1024 || this.captures.length >= 200) throw new Error('Observation capture limit reached (200 captures / 100 MB).');
-        const stored = saveObservationCapture(this.directory, this.timeline, frame.index, result);
+        const stored = saveTimelineCapture(this.directory, this.timeline, frame.captureIndex, result);
         this.bytes += size;
-        this.captureData.set(frame.index, stored);
+        this.captureData.set(frame.captureIndex, stored);
       } catch (error) { frame.error = (error as Error).message; }
-      finally { rmSync(join(tmpdir(), `isimbot-observation-${this.timeline}-${frame.index}.png`), { force: true }); }
+      finally { rmSync(join(tmpdir(), `isimbot-observation-${this.timeline}-${frame.captureIndex}.png`), { force: true }); }
       frame.endedAt = Date.now();
       if (!this.active) return;
       this.captures.push(frame);
       const discarded: StoredCapture[] = [];
       if (!this.sawTouch) while (this.captures.length > 2) {
         const old = this.captures.shift()!;
-        const data = this.captureData.get(old.index);
+        const data = this.captureData.get(old.captureIndex);
         if (data) { this.bytes -= data.images.reduce((sum, image) => sum + image.sizeBytes, 0); discarded.push(data); }
-        this.captureData.delete(old.index);
+        this.captureData.delete(old.captureIndex);
       }
       this.save();
-      for (const data of discarded) deleteObservationCapture(this.directory, data);
+      for (const data of discarded) deleteTimelineCapture(this.directory, data);
       if (frame.error?.includes('limit reached')) { this.failure = frame.error; await this.stop(); }
     };
     void (schedulers.get(this.client)?.(capture) ?? capture()).catch(error => {
@@ -243,10 +244,11 @@ export const observationTools: ToolDefinition[] = [
   { definition: { name: 'stop_observation', description: 'Stop the active app observation on this device. Leaves app running; injected hooks become inactive. Records remain on disk. Does not unload the framework; ordinary app relaunch removes it.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     async execute(client) { return await stopClientObservation(client) ?? { success: true, active: false }; } },
-  { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline, raw touch paths and candidate operation_chain. Includes at most 2 capture images when includeImages=true. Candidate replay is approximate; unsupported/multitouch gestures remain explicitly marked. Historical screenshot IDs are not valid coordinate references; use logical points.',
+  { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline, raw touch paths and candidate operation_chain. Every event has a zero-based index across all tools; timeline is returned only at the top level. Indexes are stable after archiving; pagination preserves these indexes. time is elapsed seconds, not an identifier. Capture elementDetail defaults to changes against the immediately previous capture in this session, including across pages. number returns a count; list returns compact elements; changes returns appeared/moved/disappeared/updated changeTypes. First capture marks all elements appeared; missing snapshots return elements:null with an error. Missing or duplicate identifiers support exact matches only, so changed anonymous elements appear as removal/addition. A returned empty changes list does not mean pixels are unchanged. Includes at most 2 capture images when includeImages=true. Candidate replay is approximate; unsupported/multitouch gestures remain explicitly marked. Historical screenshot IDs are not valid coordinate references; use logical points.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { timeline: timelineProperty,
-      offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 20, default: 10 },
-      includeImages: { type: 'boolean', default: false } }, required: ['timeline'] } }, responseType: 'mcp',
+      offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
+      includeImages: { type: 'boolean', default: false },
+      elementDetail: { ...elementDetailSchema, description: 'Element presentation for capture events only. changes compares full consecutive saved snapshots, independent of pagination or prior get calls; disappeared entries use their previous text/frame.' } }, required: ['timeline'] } }, responseType: 'mcp',
     async execute(client, args, settings): Promise<CallToolResult> {
       const id = args.timeline as string;
       if (!timelinePattern.test(id) || !id.startsWith('session_')) throw new Error('Invalid timeline.');
@@ -264,28 +266,39 @@ export const observationTools: ToolDefinition[] = [
       }
       const metadata = saved.session;
       if (metadata.timeline !== id || !Array.isArray(metadata.events) || metadata.events.some((e: {timeline: string}) => e.timeline !== id)) throw new Error('Saved observation timeline mismatch.');
-      const recordedEvents = metadata.events;
-      const offset = args.offset as number ?? 0, limit = args.limit as number ?? 10;
+      const recordedEvents = withEventIndexes(metadata.events);
+      const offset = args.offset as number ?? 0, limit = args.limit as number ?? 100;
       const page = recordedEvents.slice(offset, offset + limit);
       const content: CallToolResult['content'] = [];
       let images = 0;
+      const elementDetail = resolveElementDetail(args.elementDetail);
+      let previousCapture: (typeof recordedEvents)[number] | undefined;
+      for (let i = Math.min(offset, recordedEvents.length) - 1; i >= 0; i--) {
+        if (recordedEvents[i].tool === 'capture') { previousCapture = recordedEvents[i]; break; }
+      }
       const events = page.map(entry => {
-        if (entry.points) return { ...entry, pointCount: entry.points.length, points: entry.points.length > 200 ? [...entry.points.slice(0, 199), entry.points.at(-1)] : entry.points, pointsTruncated: entry.points.length > 200 };
-        if (entry.error) return entry;
-        const { capture, ...event } = entry;
-        if (!capture) return { ...event, error: 'Capture data unavailable.' };
-        if (args.includeImages && images < 2) {
+        if (entry.tool !== 'capture') return entry.points
+          ? { ...publicEvent(entry), pointCount: entry.points.length, points: entry.points.length > 200 ? [...entry.points.slice(0, 199), entry.points.at(-1)] : entry.points, pointsTruncated: entry.points.length > 200 }
+          : publicEvent(entry);
+        const previous = previousCapture;
+        previousCapture = entry;
+        const { capture, ...event } = publicEvent(entry);
+        const presentation = presentElements(capture?.metadata, previous?.capture?.metadata, elementDetail, previous !== undefined);
+        const comparison = elementDetail === 'changes' ? { comparedToIndex: previous?.index ?? null } : {};
+        const projected = { ...event, ...comparison, ...presentation, images: capture?.images ?? [],
+          ...(event.error ? { error: [event.error, presentation.error].filter(Boolean).join(' ') } : {}) };
+        if (capture && args.includeImages && images < 2) {
           try {
-            content.push({ type: 'text', text: `Capture ${entry.index}; time ${entry.time}` }, ...readObservationCapture(store.directory, capture));
+            content.push({ type: 'text', text: `Event index ${entry.index}: capture; time ${entry.time}` }, ...readTimelineCapture(store.directory, capture, id));
             images++;
-          } catch (error) { return { ...event, metadata: capture.metadata, images: capture.images, error: `Capture image unavailable: ${(error as Error).message}` }; }
+          } catch (error) { return { ...projected, error: [projected.error, `Capture image unavailable: ${(error as Error).message}`].filter(Boolean).join(' ') }; }
         }
-        return { ...event, metadata: capture.metadata, images: capture.images };
+        return projected;
       });
-      const summary = { success: true, timeline: id, bundleId: metadata.bundleId, captureInterval: metadata.captureInterval, expireAt: metadata.expireAt, handshake: metadata.handshake, udid: metadata.udid,
+      const summary = { success: true, timeline: id, elementDetail, bundleId: metadata.bundleId, captureInterval: metadata.captureInterval, expireAt: metadata.expireAt, handshake: metadata.handshake, udid: metadata.udid,
         active: sessions.get(client)?.timeline === id && sessions.get(client)!.active,
         interrupted: saved.observing && sessions.get(client)?.timeline !== id,
-        error: metadata.error, totalEntries: recordedEvents.length, offset, nextOffset: offset + page.length < recordedEvents.length ? offset + page.length : null,
+        error: metadata.error, totalEvents: recordedEvents.length, offset, nextOffset: offset + page.length < recordedEvents.length ? offset + page.length : null,
         events, operationChain: { ...operationChain(page, undefined, readOperationSettings(settings)), scope: 'Steps in this page only; first delay equals the first step time relative to session start. Other delays are recomputed between retained starts.' } };
       return { content: [{ type: 'text', text: JSON.stringify(summary) }, ...content], structuredContent: summary };
     } },

@@ -13,11 +13,11 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 30);
+    assert.equal(listed.length, 31);
     for (const name of ['start_observation', 'stop_observation', 'get_observation', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status']) {
       assert.equal(listed.find(t => t.name === name).inputSchema.properties.deviceId.type, 'string');
     }
-    assert.deepEqual(sorted(listed.filter(t => !['start_observation', 'stop_observation', 'get_observation', 'setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
+    assert.deepEqual(sorted(listed.filter(t => !['get_images', 'start_observation', 'stop_observation', 'get_observation', 'setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
   } finally { await client.close(); }
 });
 
@@ -26,7 +26,7 @@ test('MCP dispatch reaches all 20 non-image handlers with shared client and reta
   const fake = new Proxy({}, { get: (_, method) => method === 'getConnectedDevice' ? () => 'device' : async (...args) => {
     calls.push([method, args]);
     if (method === 'connect' && args[0] === 'fail') throw new Error('connection failed');
-    return method === 'listDevices' ? [] : 'sample';
+    return ['listDevices', 'listApps'].includes(method) ? [] : 'sample';
   } });
   const server = createServer(fake, undefined, () => fake);
   const client = new Client({ name: 'test', version: '1' });
