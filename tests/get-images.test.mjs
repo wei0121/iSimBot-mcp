@@ -21,7 +21,7 @@ async function offlineClient(settings){const device={getConnectedDevice:()=>null
 
 test('chain captures return flat references, survive a new MCP server, and load in requested event order',async t=>{
  const {directory,settings}=fixture(t),chain=chainFixture([raw(0),raw(1)]);
- const result=await chain.execute({getConnectedDevice:()=> 'device'},{steps:['capture','tap','capture'].map(tool=>({tool,delay:0}))},settings);
+ const result=await chain.execute({getConnectedDevice:()=> 'device'},{steps:['capture','tap','capture'].map(tool=>({tool,interval:0}))},settings);
  const summary=result.structuredContent;assert.equal(summary.success,true);assert.equal(summary.totalEvents,3);assert.ok(!Object.hasOwn(summary,'steps'));
  assert.equal(result.content.filter(c=>c.type==='image').length,0);
  assert.deepEqual(summary.events.map(e=>e.index),[0,1,2]);assert.ok(summary.events.every(e=>!Object.hasOwn(e,'timeline')));
@@ -40,8 +40,8 @@ test('observations use the same image reader, general event indexes, and retain 
  const {directory,settings}=fixture(t),timeline='session_1234abcd',store=new ObservationStore(join(directory,'observations'));
  const capture=saveTimelineCapture(store.directory,timeline,8,{content:[image('observed')],structuredContent:raw(0)});
  store.save({timeline,udid:'offline-device',bundleId:'test.app',startedAt:1,expireAt:2,captureInterval:0.5,events:[
-  {timeline,index:0,tool:'tap',arguments:{x:1,y:1},timestamp:0,delay:0,duration:0.1,points:[{x:1,y:1,timestamp:0}]},
-  {timeline,index:1,tool:'capture',arguments:{},timestamp:0.5,delay:0.5,duration:0.2,capture},
+  {timeline,index:0,tool:'tap',arguments:{x:1,y:1},timestamp:0,interval:0,duration:0.1,points:[{x:1,y:1,timestamp:0}]},
+  {timeline,index:1,tool:'capture',arguments:{},timestamp:0.5,interval:0.5,duration:0.2,capture},
  ]},'archived');
  const before=readFileSync(store.observationsPath,'utf8'),offline=await offlineClient(settings);
  try{const result=await offline.client.callTool({name:'get_images',arguments:{timeline,indexes:[1]}});assert.ok(!result.isError);assert.equal(Buffer.from(result.content.find(c=>c.type==='image').data,'base64').toString(),'observed');assert.equal(readFileSync(store.observationsPath,'utf8'),before);}finally{await offline.close();}

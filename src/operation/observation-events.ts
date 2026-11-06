@@ -125,11 +125,11 @@ export function operationChain(source: RecordedAction[] | OperationRecord[], ori
   const records: OperationRecord[] = source.length && 'startedAt' in source[0]
     ? observationEvents(source as RecordedAction[], [], createTimeline('session'), origin ?? (source[0] as RecordedAction).startedAt)
     : source as OperationRecord[];
-  let previousStart = records.length ? records[0].timestamp - records[0].delay * 1000 : 0;
+  let previousStart = records.length ? records[0].timestamp - records[0].interval * 1000 : 0;
   const steps = records.filter(record => record.tool !== 'unsupported').map((record, index) => {
-    const delay = (record.timestamp - previousStart) / 1000;
+    const interval = (record.timestamp - previousStart) / 1000;
     previousStart = record.timestamp;
-    return { index, tool: record.tool, arguments: record.arguments, delay, timestamp: record.timestamp, duration: record.duration };
+    return { index, tool: record.tool, arguments: record.arguments, interval, timestamp: record.timestamp, duration: record.duration };
   });
   let error: string | undefined;
   try {
@@ -137,5 +137,5 @@ export function operationChain(source: RecordedAction[] | OperationRecord[], ori
     prepareSteps(steps, [...gesturesTools, ...captureTools, ...screenshotTools], timeline, timing);
   } catch (failure) { error = (failure as Error).message; }
   return { timeline, steps, replayable: !error, ...(error ? { error } : {}),
-    note: 'Candidate replay only. delay is start-to-start, duration never adds to delay. Backend timing and trajectories may differ. Unsupported operations or limits require adaptation; overlapping non-image commands fail at execution.' };
+    note: 'Candidate replay only. interval is start-to-start, duration never adds to interval. Backend timing and trajectories may differ. Unsupported operations or limits require adaptation; overlapping non-image commands fail at execution.' };
 }

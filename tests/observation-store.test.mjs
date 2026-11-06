@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process';
 import { ObservationStore } from '../dist/storage/observation-store.js';
 const run=promisify(execFile);
 function fixture(t){const dir=mkdtempSync(join(tmpdir(),'isimbot-observation-store-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));return {dir,store:new ObservationStore(dir)};}
-function record(timeline){return {timeline,udid:'device',bundleId:'test.app',startedAt:1,expireAt:1001,captureInterval:0.5,events:[{timeline,tool:'tap',arguments:{x:1,y:1},timestamp:2,delay:2,duration:0.1},{timeline,tool:'capture',arguments:{},timestamp:1,delay:1,duration:0.2,capture:{images:[{path:'/example/image.png',mimeType:'image/png',sizeBytes:10}],metadata:{elements:[]}}}]};}
+function record(timeline){return {timeline,udid:'device',bundleId:'test.app',startedAt:1,expireAt:1001,captureInterval:0.5,events:[{timeline,tool:'tap',arguments:{x:1,y:1},timestamp:2,interval:2,duration:0.1},{timeline,tool:'capture',arguments:{},timestamp:1,interval:1,duration:0.2,capture:{images:[{path:'/example/image.png',mimeType:'image/png',sizeBytes:10}],metadata:{elements:[]}}}]};}
 test('root arrays retain other sessions, sort events stably and retain capture references; archive is idempotent',t=>{
  const {dir,store}=fixture(t);const a=record('session_11111111'),b=record('session_22222222');
  store.save(a,'observing');store.save(b,'observing');

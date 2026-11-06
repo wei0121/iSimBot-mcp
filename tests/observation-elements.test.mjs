@@ -75,7 +75,7 @@ function fixture(t, snapshots) {
  t.after(()=>rmSync(directory,{recursive:true,force:true}));
  const settings=new ScreenshotSettingsStore(join(directory,'screenshot.json'));
  const store=new ObservationStore(join(directory,'observations')),timeline='session_1234abcd';
- const events=snapshots.map((snapshot,index)=>({timeline,tool:'capture',arguments:{},index,timestamp:index*0.5,delay:index?0.5:0,duration:0.2,
+ const events=snapshots.map((snapshot,index)=>({timeline,tool:'capture',arguments:{},index,timestamp:index*0.5,interval:index?0.5:0,duration:0.2,
   ...(snapshot===undefined?{error:'Capture failed'}:{capture:{images:[{path:join(directory,'missing.png'),mimeType:'image/png',sizeBytes:1}],metadata:snapshot}})}));
  store.save({timeline,udid:'device',bundleId:'test.app',startedAt:1,expireAt:1001,captureInterval:0.5,events},'archived');
  const client={getConnectedDevice:()=> 'device'};
@@ -134,7 +134,7 @@ test('mixed timeline pagination and element comparison use general event indexes
  // Simulate an archive from the old capture-only counter format without migrating it on disk.
  const sessions=JSON.parse(readFileSync(f.store.observationsPath,'utf8'));
  sessions[0].events[0].index=8;sessions[0].events[1].index=9;
- sessions[0].events.splice(1,0,{timeline:f.timeline,tool:'tap',arguments:{x:20,y:20},timestamp:0.25,delay:0.25,duration:0.1,points:[{x:20,y:20,timestamp:250}]});
+ sessions[0].events.splice(1,0,{timeline:f.timeline,tool:'tap',arguments:{x:20,y:20},timestamp:0.25,interval:0.25,duration:0.1,points:[{x:20,y:20,timestamp:250}]});
  const {writeFileSync}=await import('node:fs');writeFileSync(f.store.observationsPath,JSON.stringify(sessions));
  const before=readFileSync(f.store.observationsPath,'utf8');
  const all=await f.call({});assert.deepEqual(all.structuredContent.events.map(e=>e.index),[0,1,2]);

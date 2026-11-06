@@ -54,9 +54,9 @@ test('capture attaches elements, screenshot skips reading and uses native dimens
  failure=false;empty=true;
  assert.deepEqual((await tool.execute(client,{},settings)).structuredContent.elements,[]);
  const chain=tools.find(t=>t.definition.name==='operation_chain');
- const chained=await chain.execute(client,{steps:[{tool:'screenshot',delay:0},{tool:'capture',delay:0}]},settings);
+ const chained=await chain.execute(client,{steps:[{tool:'screenshot',interval:0},{tool:'capture',interval:0}]},settings);
  await assert.rejects(screenshot.execute(client,{includeElements:false},settings),/Unknown/);
- await assert.rejects(chain.execute(client,{steps:Array.from({length:31},(_,i)=>({tool:i%2?'capture':'screenshot',delay:0}))},settings),/30/);
+ await assert.rejects(chain.execute(client,{steps:Array.from({length:31},(_,i)=>({tool:i%2?'capture':'screenshot',interval:0}))},settings),/30/);
  assert.ok(!('elements' in chained.structuredContent.events[0].result));
  assert.deepEqual(chained.structuredContent.events[1].elements,[]);
 });
