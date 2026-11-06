@@ -29,6 +29,6 @@ and operation chains separately on each platform.
 
 ## 4. Device control
 
-Simulator rotation is implemented in source, including operation chains and
-physical orientation confirmation. Explicit lock/unlock and more device state
+Device control is implemented in source for system text size, appearance,
+rotation, notification send/list and fixed location, including operation chains. Explicit lock/unlock and more device state
 queries remain planned. The current `press_button` tool exposes the lock button.

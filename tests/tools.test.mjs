@@ -13,11 +13,11 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 32);
+    assert.equal(listed.length, 33);
     for (const name of ['start_observation', 'stop_observation', 'get_observation', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status']) {
       assert.equal(listed.find(t => t.name === name).inputSchema.properties.deviceId.type, 'string');
     }
-    assert.deepEqual(sorted(listed.filter(t => !['get_images', 'start_observation', 'stop_observation', 'get_observation', 'setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
+    assert.deepEqual(sorted(listed.filter(t => !['device_control', 'get_images', 'start_observation', 'stop_observation', 'get_observation', 'setup', 'screenshot', 'capture', 'operation_chain', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status'].includes(t.name))), sorted(baseline.filter(t => !['screenshot', 'capture'].includes(t.name))));
   } finally { await client.close(); }
 });
 

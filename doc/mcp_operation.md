@@ -45,6 +45,46 @@ changing orientation returns an actionable error rather than guessed coordinates
 Local native builds include this reader via `build:observation`. Explicit image
 paths keep the backend PNG; returned images follow the interface orientation.
 
+## Device control
+
+`device_control` uses the common top-level `deviceId`, plus `action` and `payload`:
+
+```json
+{"deviceId":"iPhone 18 Pro","action":"set_text_size","payload":{"size":"extra-large"}}
+```
+
+| Action | Payload |
+| --- | --- |
+| `get_settings` | `{}` — reads appearance, textSize and physical orientation independently |
+| `set_text_size` | `{"size":"extra-large"}` — standard or accessibility Dynamic Type category |
+| `rotate` | `{"orientation":"landscape_left"}` — same implementation as `rotate` |
+| `set_appearance` | `{"appearance":"dark"}` — `light` or `dark` |
+| `send_notification` | `{"bundleId":"com.example.app","notification":{"aps":{"alert":"Hello"}}}` |
+| `list_notifications` | `{"bundleId":"com.example.app","offset":0,"limit":100}` — offset/limit optional |
+| `set_location` | `{"latitude":48.137,"longitude":11.575}` — fixed position only |
+
+Payload fields belong only to their selected action. Unknown fields, nested
+`deviceId`, invalid ranges and notification JSON over 4096 UTF-8 bytes fail
+before a chain starts. In chains, put `deviceId` on the chain and use
+`{"tool":"device_control","arguments":{"action":"set_appearance","payload":{"appearance":"dark"}}}`.
+Default minimum start interval is 1 second, configurable with
+`setup.minDelay.device_control`; rotate/location aliases also honor their existing minima.
+
+Setting changes read back system state; apps can override appearance or ignore
+Dynamic Type. Physical rotation does not guarantee interface rotation/readiness.
+`get_settings` returns null/error for unreadable fields and `partial:true`;
+`capabilities` describes current read availability, while `actions` lists the
+MCP action contracts, not a guarantee of runtime support. Location is not read
+back; success means the request was accepted, not an app location callback.
+
+Notification send simulates delivery, without testing the APNs server path.
+Permissions and foreground handling determine presentation. Listing returns
+currently retained delivered notifications, newest first, not complete history
+or a live stream; no app launch is performed. `deliveredAt` uses Unix seconds
+(or null). Pagination defaults/maxes to 100 and may shift as notifications arrive
+or disappear. Notifications are not saved in iSimBot command history.
+Existing `rotate`, `set_location` and `open_url` remain available.
+
 ## Apps
 
 | Operation | Description |

@@ -1,3 +1,4 @@
+import { textSizes, deviceControlActions, parseDeviceControl, type TextSize } from '../common/device-control.js';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseDisplayGeometry, parseHIDRotation, hidPoint, type DisplayGeometry } from '../image/display-geometry.js';
@@ -253,6 +254,89 @@ export class IDBClient {
       installType: typeof app.install_type === 'string' ? app.install_type : null,
       processState: typeof app.process_state === 'string' ? app.process_state : null,
     }));
+  }
+
+  private requireDevice(): string {
+    if (!this.udid) throw new Error('No internal device connection. Supply deviceId.');
+    return safeIdentifier(this.udid);
+  }
+
+  async getDeviceAppearance(timeout = 10000): Promise<'light' | 'dark'> {
+    const { stdout } = await run('xcrun', ['simctl', 'ui', this.requireDevice(), 'appearance'], { timeout });
+    const value = stdout.trim();
+    if (value !== 'light' && value !== 'dark') throw new Error(`Appearance unavailable: ${value.slice(0, 100) || 'empty response'}.`);
+    return value;
+  }
+
+  async getDeviceTextSize(timeout = 10000): Promise<TextSize> {
+    const { stdout } = await run('xcrun', ['simctl', 'ui', this.requireDevice(), 'content_size'], { timeout });
+    const value = stdout.trim() as TextSize;
+    if (!textSizes.includes(value)) throw new Error(`System text size unavailable: ${value.slice(0, 100) || 'empty response'}.`);
+    return value;
+  }
+
+  async getPhysicalOrientation(): Promise<string> {
+    return parseOrientation((await run('idb', ['rotation', '--udid', this.requireDevice(), '--json'])).stdout);
+  }
+
+  async getDeviceSettings() {
+    this.requireDevice();
+    const fields = ['appearance', 'textSize', 'orientation'] as const;
+    const values = await Promise.allSettled([this.getDeviceAppearance(), this.getDeviceTextSize(), this.getPhysicalOrientation()]);
+    const settings: Record<string, string | null> = {}, errors: Record<string, string> = {}, capabilities: Record<string, { readable: boolean }> = {};
+    values.forEach((result, i) => {
+      const field = fields[i]; capabilities[field] = { readable: result.status === 'fulfilled' };
+      settings[field] = result.status === 'fulfilled' ? result.value : null;
+      if (result.status === 'rejected') errors[field] = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    });
+    return { settings, capabilities, actions: deviceControlActions, partial: Object.keys(errors).length > 0, ...(Object.keys(errors).length ? { errors } : {}) };
+  }
+
+  private async setUISetting(option: 'appearance' | 'content_size', requested: string, read: (remainingMs: number) => Promise<string>): Promise<string> {
+    let actual: string | undefined;
+    try {
+      await run('xcrun', ['simctl', 'ui', this.requireDevice(), option, requested]);
+      const deadline = performance.now() + 3000;
+      do {
+        actual = await read(Math.max(1, Math.ceil(deadline - performance.now())));
+        if (actual === requested) return actual;
+        if (performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, Math.min(100, Math.max(0, deadline - performance.now()))));
+      } while (performance.now() < deadline);
+    } catch (error) {
+      throw new ToolError(`Could not confirm system ${option}: ${(error as Error).message}. The request may have applied; use device_control get_settings before retrying.`, {
+        code: 'DEVICE_SETTING_FAILED', setting: option, requested, actual: actual ?? null,
+      });
+    }
+    throw new ToolError(`System ${option} was not confirmed. The setting may have changed; inspect before retrying.`, { code: 'DEVICE_SETTING_NOT_CONFIRMED', requested, actual: actual ?? null });
+  }
+
+  async setDeviceAppearance(appearance: 'light' | 'dark'): Promise<'light' | 'dark'> {
+    parseDeviceControl({ action: 'set_appearance', payload: { appearance } });
+    return await this.setUISetting('appearance', appearance, (ms) => this.getDeviceAppearance(ms)) as 'light' | 'dark';
+  }
+
+  async setDeviceTextSize(size: TextSize): Promise<TextSize> {
+    parseDeviceControl({ action: 'set_text_size', payload: { size } });
+    return await this.setUISetting('content_size', size, (ms) => this.getDeviceTextSize(ms)) as TextSize;
+  }
+
+  async sendNotification(bundleId: string, notification: Record<string, unknown>): Promise<void> {
+    parseDeviceControl({ action: 'send_notification', payload: { bundleId, notification } });
+    await run('idb', ['notification', 'send', '--udid', this.requireDevice(), '--', bundleId, JSON.stringify(notification)]);
+  }
+
+  async listNotifications(bundleId: string) {
+    parseDeviceControl({ action: 'list_notifications', payload: { bundleId } });
+    const { stdout } = await run('idb', ['notification', 'list', '--udid', this.requireDevice(), '--json', '--', bundleId]);
+    const text = stdout.trim();
+    const records = !text ? [] : text.startsWith('[') ? JSON.parse(text) : text.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+    if (!Array.isArray(records)) throw new Error('Invalid delivered notification list.');
+    return records.map(item => {
+      if (!item || item.bundle_id !== bundleId || typeof item.identifier !== 'string' ||
+        !['title', 'subtitle', 'body', 'thread_identifier'].every(key => typeof item[key] === 'string') ||
+        !(item.date === null || typeof item.date === 'number' && Number.isFinite(item.date))) throw new Error('Invalid delivered notification data.');
+      return { bundleId: item.bundle_id, identifier: item.identifier, title: item.title, subtitle: item.subtitle, body: item.body, threadIdentifier: item.thread_identifier, deliveredAt: item.date };
+    }).sort((a, b) => (b.deliveredAt ?? -Infinity) - (a.deliveredAt ?? -Infinity) || a.identifier.localeCompare(b.identifier));
   }
 
   async rotate(orientation: DeviceOrientation): Promise<void> {
