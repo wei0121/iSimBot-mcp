@@ -1,6 +1,6 @@
 {
   "name": "isimbot-mcp",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "iSimBot-MCP: MCP server for iOS simulator E2E testing via coordinate-based automation",
   "type": "module",
   "main": "dist/index.js",
@@ -24,8 +24,8 @@
     "automation",
     "idb"
   ],
-  "author": "Weiren",
-  "license": "MIT",
+  "author": "Weiren Xie",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/wei0121/iSimBot-mcp.git"
@@ -46,6 +46,7 @@
     "dist",
     "README.md",
     "doc",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ]
 }
