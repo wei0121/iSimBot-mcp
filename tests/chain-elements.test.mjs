@@ -88,6 +88,12 @@ test('actual MCP capture handlers expose chain elementDetail while standalone ca
  const fake={getConnectedDevice:()=> 'device',getScreenshotGeometry:()=>({udid:'device',scale:1}),
  screenshot:async path=>{await sharp({create:{width:100,height:200,channels:3,background:'white'}}).png().toFile(path);return path;},
  describeUI:async()=>JSON.stringify([{AXUniqueId:'button',AXLabel:'Search',type:'Button',role:'AXButton',frame:{x:10+(reads++)*5,y:20,width:30,height:20}}])};
+ fake.captureScreen=async path=>{
+  const startedAt=Date.now();const reads=await Promise.allSettled([fake.screenshot(path),fake.describeUI()]);
+  if(reads[0].status==='rejected')throw reads[0].reason;
+  return {path,timestamp:startedAt,captureTiming:{image:{startedAt,finishedAt:Date.now()},elements:{startedAt,finishedAt:Date.now()}},
+   ...(reads[1].status==='fulfilled'?{elements:reads[1].value}:{elementsError:reads[1].reason.message})};
+ };
  const server=createServer(fake,new ScreenshotSettingsStore(join(directory,'screenshot.json')),()=>fake),client=new Client({name:'chain-element-detail',version:'1'});
  const [a,b]=InMemoryTransport.createLinkedPair();
  try {

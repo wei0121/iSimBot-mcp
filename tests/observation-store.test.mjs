@@ -8,12 +8,12 @@ import { execFile } from 'node:child_process';
 import { ObservationStore } from '../dist/storage/observation-store.js';
 const run=promisify(execFile);
 function fixture(t){const dir=mkdtempSync(join(tmpdir(),'isimbot-observation-store-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));return {dir,store:new ObservationStore(dir)};}
-function record(timeline){return {timeline,udid:'device',bundleId:'test.app',startedAt:1,expireAt:1001,captureInterval:0.5,events:[{timeline,tool:'tap',arguments:{x:1,y:1},time:2,delay:2,duration:0.1},{timeline,tool:'capture',arguments:{},time:1,delay:1,duration:0.2,capture:{images:[{path:'/example/image.png',mimeType:'image/png',sizeBytes:10}],metadata:{elements:[]}}}]};}
+function record(timeline){return {timeline,udid:'device',bundleId:'test.app',startedAt:1,expireAt:1001,captureInterval:0.5,events:[{timeline,tool:'tap',arguments:{x:1,y:1},timestamp:2,delay:2,duration:0.1},{timeline,tool:'capture',arguments:{},timestamp:1,delay:1,duration:0.2,capture:{images:[{path:'/example/image.png',mimeType:'image/png',sizeBytes:10}],metadata:{elements:[]}}}]};}
 test('root arrays retain other sessions, sort events stably and retain capture references; archive is idempotent',t=>{
  const {dir,store}=fixture(t);const a=record('session_11111111'),b=record('session_22222222');
  store.save(a,'observing');store.save(b,'observing');
  assert.ok(Array.isArray(JSON.parse(readFileSync(store.observingPath))));
- assert.deepEqual(store.find(a.timeline).events.map(e=>e.time),[1,2]);
+ assert.deepEqual(store.find(a.timeline).events.map(e=>e.timestamp),[1,2]);
  store.save(a,'archived');store.save(a,'archived');store.save(a,'observing');
  assert.equal(store.lookup(a.timeline).observing,false);assert.equal(store.lookup(b.timeline).observing,true);
  for (const path of [store.observingPath,store.observationsPath]) assert.ok(JSON.parse(readFileSync(path)).every(session=>!Object.hasOwn(session,'active')));

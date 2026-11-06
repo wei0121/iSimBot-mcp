@@ -54,8 +54,8 @@ test('preflight rejects invalid late steps before any action', async () => {
     assert.deepEqual(events, []);
   }
   const { chain, client } = fixture();
-  await assert.rejects(chain.execute(client, { steps: Array(7).fill({ tool: 'screenshot' }) }, {}), /6 screenshot/);
-  await assert.rejects(chain.execute(client, { steps: Array(4).fill({ tool: 'screenshot', delay: 10 }) }, {}), /30 seconds/);
+  await assert.rejects(chain.execute(client, { steps: Array(31).fill({ tool: 'screenshot' }) }, {}), /30 screenshot/);
+  await assert.rejects(chain.execute(client, { steps: Array(13).fill({ tool: 'screenshot', delay: 10 }) }, {}), /120 seconds/);
 });
 test('failure stops subsequent steps and retains earlier images and outcomes', async () => {
   const { chain, events } = fixture();
@@ -98,8 +98,8 @@ test('capture starts while a gesture is running, and results retain start order'
   assert.equal(result.structuredContent.success,true);
   const [swipe,capture]=result.structuredContent.events;
   assert.deepEqual(starts,['swipe','capture']);
-  assert.ok(capture.time < swipe.time + swipe.duration);
-  assert.ok(Math.abs(capture.delay-(capture.time-swipe.time)) < 1e-9);
+  assert.ok(capture.timestamp < swipe.timestamp + swipe.duration * 1000);
+  assert.ok(Math.abs(capture.delay-(capture.timestamp-swipe.timestamp)/1000) < 1e-9);
   assert.match(result.structuredContent.timeline,/^chain_[0-9a-f]{8}$/);
   assert.ok(!Object.hasOwn(swipe,'timeline') && !Object.hasOwn(capture,'timeline'));
 });
@@ -111,9 +111,9 @@ test('conflicting non-image operations fail without running the second gesture',
   assert.equal(result.structuredContent.events[1].code,'OPERATION_TIME_CONFLICT');
   assert.equal(result.structuredContent.skippedSteps,1);
 });
-test('source time must agree with start-to-start delays before actions run',async()=>{
+test('invalid source timestamp is rejected before actions run',async()=>{
   const {chain,client,events}=fixture();
-  await assert.rejects(chain.execute(client,{steps:[{tool:'tap',arguments:{x:1,y:2},delay:0.3,time:1}]},{}),/time must equal/);
+  await assert.rejects(chain.execute(client,{steps:[{tool:'tap',arguments:{x:1,y:2},delay:0.3,timestamp:1.5}]},{}),/timestamp must be/);
   assert.deepEqual(events,[]);
 });
 

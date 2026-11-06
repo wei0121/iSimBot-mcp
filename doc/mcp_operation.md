@@ -155,21 +155,21 @@ without `screenshotId`. Accessibility may not expose every visible element.
 Observation events and chain results share this shape:
 
 ```json
-{"timeline":"chain_a7k2m9x4","index":0,"tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"time":1,"delay":1,"duration":0.65}
+{"timeline":"chain_a7k2m9x4","index":0,"tool":"swipe","arguments":{"x1":170,"y1":650,"x2":170,"y2":400,"duration":0.5},"timestamp":1794000001000,"delay":1,"duration":0.65}
 ```
 
-`timeline` is `session_xxxxxxxx` or `chain_xxxxxxxx`. All timing uses seconds:
-`time` is this operation's start relative to timeline start, `delay` is this start
+`timeline` is `session_xxxxxxxx` or `chain_xxxxxxxx`. Timestamps use Unix milliseconds; durations use seconds:
+`timestamp` is this operation's Unix epoch start in milliseconds, `delay` is this start
 minus the previous start (first delay is from timeline start), and `duration` is
 this operation's own elapsed time. Duration never adds to delay. Chain duration
 measures tool execution; observed gesture duration measures the touch interval.
 `arguments.duration` remains the requested gesture duration when supported.
 
-For starts `[0, 1, 5, 6]` and durations `[1, 2, 3, 2]`, delays are `[0, 1, 4, 1]`.
+For start offsets `[0, 1, 5, 6]` seconds and durations `[1, 2, 3, 2]`, delays are `[0, 1, 4, 1]`.
 Operation three can still be running when operation four starts.
 
 Chain requests require only `tool`; `arguments` defaults to `{}` and `delay` to
-0.3 seconds. Optional source `time` must agree with cumulative delays. Execution
+0.3 seconds. Optional source `timestamp` is metadata only and does not schedule execution. Execution
 assigns a fresh chain timeline and measures actual start times/durations. If the
 backend or event loop is late, actual starts may be later than requested.
 
@@ -177,7 +177,7 @@ backend or event loop is late, actual starts may be later than requested.
 non-image commands fail with `OPERATION_TIME_CONFLICT` instead of being delayed.
 To inspect motion, follow a gesture with image steps at `delay: 0.1`.
 On failure, no further steps are launched; already started operations finish.
-Each chain allows up to 20 steps, 6 image calls, 0–10 seconds per delay and 30
+Each chain allows up to 100 steps, 30 image calls, 0–10 seconds per delay and 120
 seconds total delay. Whole-chain device queue ownership is preserved.
 
 Top-level `elementDetail` uses the same `number` / `list` / `changes` presentation
@@ -272,7 +272,7 @@ retain their `timeline`, device/app metadata and `events` array. Capture images 
 `session_xxxxxxxx-capture-000000-0.png` (or `.jpeg`). Events store image paths,
 metadata and elements, without Base64. Images are read when `includeImages` is
 requested; missing files are reported per event. There are no per-session or
-per-capture JSON files. Events are sorted stably by `time`. Updates parse the
+per-capture JSON files. Events are sorted stably by `timestamp`. Updates parse the
 JSON into objects, merge under a cross-process lock, then serialize and atomically
 replace the file. File membership indicates state; session objects have no `active` field.
 Archive writes complete before observing entries are removed. Ended sessions cannot
@@ -288,7 +288,7 @@ needs removal after confirming its owner exited; requests fail safely meanwhile.
 Every observation event and chain step has a zero-based `index` in its timeline.
 Observation indexes follow chronological event order across gestures and captures;
 chain indexes follow request order, regardless of concurrent completion order.
-`timeline` + `index` identifies an event; `time` remains its elapsed start time.
+`timeline` + `index` identifies an event; `timestamp` is its Unix epoch start in milliseconds.
 Pagination never restarts numbering. Observing snapshots may be renumbered while
 late touch events arrive; indexes are fixed after stop/archive. Old archives are
 indexed when returned without rewriting the stored data. Internal capture file
@@ -307,11 +307,11 @@ Editing events describe recorded changes; they are not converted into text comma
 editors remain outside observation scope.
 
 Every session has an `events` array. Internally saved events and
-the protocol-v5 handshake (v4 archives remain readable) carry `timeline`; public events inherit it from the
+the protocol-v6 handshake (v4/v5 archives remain readable) carry `timeline`; public events inherit it from the
 response root. Events use `tool` values `tap`,
 `double_tap`, `long_press`, `scroll`, `swipe`, `capture`, `editing_begin`,
 `text_change`, `editing_end` or `unsupported`, with
-`arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
+`arguments`, `timestamp`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
 the app's temporary directory, removed after successful finalization.
 `captureInterval` is independent per session (0.5–10 seconds, default 0.5).
 
@@ -342,7 +342,7 @@ use the older schema and are not read by the new timeline API.
 ## Timeline images and return format
 
 Observation and chain responses use top-level `timeline` and `events`. Public
-events have `index`, `tool`, `arguments`, `time`, `delay` and `duration`, without
+events have `index`, `tool`, `arguments`, `timestamp`, `delay` and `duration`, without
 repeating `timeline`. Chain requests still use `steps`. Capture events directly
 contain `images` (file references), `metadata` (image/device information), and
 `elements` or `elementCount`, without a `result` wrapper. `changes` additionally
@@ -399,3 +399,22 @@ codes rather than raw system output.
 5 seconds after one termination request. Already-stopped apps are a confirmed
 no-op. Failed process queries remain `confirmed: false`, `terminated: null`;
 a process still running at the deadline returns `APP_STILL_RUNNING`.
+
+
+All event and touch-path `timestamp` fields use Unix epoch milliseconds. `delay`
+and `duration` remain durations in seconds. Chain scheduling uses a monotonic
+clock; its event timestamps use an epoch anchor. A command-start timestamp is
+not a measurement of when the touch reached the app.
+
+Capture validates orientation, then starts screenshot and accessibility reads
+in the same phase; image resizing/encoding follows both reads. Acquisitions are
+queued per device, while gestures may continue. Metadata includes `timestamp`
+and `captureTiming.image` / `captureTiming.elements`, each with epoch-millisecond
+`startedAt` and `finishedAt`. These are backend read windows, not an atomic-frame
+guarantee. During animation inspect the windows before relating pixels to elements.
+
+Saved chain capture images are limited to 100 MiB per chain. Inline screenshot
+responses keep the 16 MB Base64 budget; `get_images` retains its smaller batch
+limits. Old observation elapsed times are converted in memory using session
+`startedAt`; files are not rewritten on read. Old chain captures without an epoch
+origin return `timestamp: null` instead of an invented timestamp.

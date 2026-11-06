@@ -14,8 +14,8 @@ const tap=delay=>({tool:'tap',arguments:{x:100,y:200},...(delay===undefined?{}:{
 test('minimum interval uses gesture duration and counts images without resetting previous command',()=>{
  const explicit=[swipe,{tool:'capture',delay:0.1},tap(0.3)];
  assert.throws(()=>prepareSteps(explicit,tools,parent),error=>error.details.code==='MIN_OPERATION_DELAY'&&Math.abs(error.details.minimumDelay-2.1)<1e-9);
- const steps=prepareSteps([swipe,{tool:'capture',delay:0.1},tap()],tools,parent);
- assert.equal(steps[1].time,0.1);assert.equal(steps[2].time,2.2);assert.equal(steps[2].delay,2.1);
+ const steps=prepareSteps([swipe,{tool:'capture',delay:0.1},tap()],tools,parent,undefined,1000);
+ assert.equal(steps[1].timestamp,1100);assert.equal(steps[2].timestamp,3200);assert.equal(steps[2].delay,2.1);
  assert.doesNotThrow(()=>prepareSteps([swipe,{tool:'capture',delay:0.1},{tool:'screenshot',delay:0.1}],tools,parent));
 });
 test('short explicit delays fail preflight before any side effects with actionable fields',async()=>{

@@ -7,7 +7,7 @@ import { readTimelineCapture, type StoredCapture } from '../storage/timeline-ima
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 
 export const imageTools: ToolDefinition[] = [{
-  definition: { name: 'get_images', description: 'Read saved capture images by timeline and public event indexes, in request order. Supports archived observations and completed chains without connecting to a simulator. No new screenshots are taken. Up to 6 unique indexes, 6 images and 16 MB Base64 per response; individual missing/cleaned images report errors while other indexes continue. Captures in both mode may contain two images. No arbitrary file paths accepted.',
+  definition: { name: 'get_images', description: 'Read saved capture images by timeline and public event indexes, in request order. Supports archived observations and completed chains without connecting to a simulator. No new screenshots are taken. Up to 6 unique indexes, 6 images and 16 MB Base64 per response; individual missing/cleaned images report errors while other indexes continue. Captures in both mode may contain two images. Event timestamp is Unix epoch milliseconds; legacy chain timestamps may be null when no epoch origin was stored. No arbitrary file paths accepted.',
     inputSchema: { type: 'object', additionalProperties: false, required: ['timeline', 'indexes'], properties: {
       timeline: { type: 'string' }, indexes: { type: 'array', minItems: 1, maxItems: 6, uniqueItems: true, items: { type: 'integer', minimum: 0 } },
     } } }, responseType: 'mcp',
@@ -15,7 +15,7 @@ export const imageTools: ToolDefinition[] = [{
     if (Object.keys(args).some(k => !['timeline', 'indexes'].includes(k)) || typeof args.timeline !== 'string' || !timelinePattern.test(args.timeline) || !Array.isArray(args.indexes) || !args.indexes.length || args.indexes.length > 6 || args.indexes.some(i => !Number.isSafeInteger(i) || i < 0) || new Set(args.indexes).size !== args.indexes.length) throw new Error('Provide timeline and 1–6 unique non-negative integer indexes.');
     const timeline = args.timeline, indexes = args.indexes as number[];
     let directory: string;
-    let captures: Array<{ index: number; time: number; capture?: StoredCapture }>;
+    let captures: Array<{ index: number; timestamp: number | null; capture?: StoredCapture }>;
     if (timeline.startsWith('session_')) {
       directory = join(dirname(settings.path), 'observations');
       const saved = new ObservationStore(directory).lookup(timeline);
@@ -38,9 +38,9 @@ export const imageTools: ToolDefinition[] = [{
         const size = images.reduce((n, c) => n + (c.type === 'image' ? c.data.length : 0), 0);
         if (imageCount + images.length > 6 || bytes + size > 16_000_000) throw new Error('Image batch limit reached. Request fewer indexes.');
         imageCount += images.length; bytes += size;
-        content.push({ type: 'text', text: `Event index ${index}: capture; time ${entry.time}` }, ...images);
-        return { index, time: entry.time, success: true, images: entry.capture.images };
-      } catch (error) { return { index, ...(entry ? { time: entry.time } : {}), success: false, error: (error as Error).message }; }
+        content.push({ type: 'text', text: `Event index ${index}: capture; timestamp ${entry.timestamp}` }, ...images);
+        return { index, timestamp: entry.timestamp, ...(entry.timestamp === null ? { timingNote: 'Legacy chain has no epoch timestamp; no timestamp was guessed.' } : {}), success: true, images: entry.capture.images };
+      } catch (error) { return { index, ...(entry ? { timestamp: entry.timestamp } : {}), success: false, error: (error as Error).message }; }
     });
     const success = events.every(e => e.success);
     const summary = { timeline, success, partial: !success && events.some(e => e.success), events };

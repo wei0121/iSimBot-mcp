@@ -6,15 +6,20 @@ import { captureScreenshot, imageDescription, imageInputSchema, parseImageArgume
 export const captureTools: ToolDefinition[] = [{
   definition: {
     name: 'capture',
-    description: 'Capture the screen and all accessibility elements. Default mode logical (or saved setup mode). Top-level elements includes label, title, value, identifier, role, type, enabled, frame and center. Both mode includes one elements list alongside images. Element frames and centers ALWAYS use logical points: tap center with the same deviceId WITHOUT screenshotId. Image and accessibility reads are sequential, not atomic; centers do not guarantee visibility or tappability. Accessibility failure preserves images with elements:null and elementsError. ' + imageDescription,
+    description: 'Capture the screen and all accessibility elements. Default mode logical (or saved setup mode). Top-level elements includes label, title, value, identifier, role, type, enabled, frame and center. Both mode includes one elements list alongside images. Element frames and centers ALWAYS use logical points: tap center with the same deviceId WITHOUT screenshotId. Image and accessibility backend reads start together after geometry validation and before encoding. timestamp and captureTiming use Unix milliseconds; image/elements startedAt/finishedAt are backend read windows, not a claim of an atomic frame. Acquisitions queue per device; command timestamp can precede actual capture. Centers do not guarantee visibility or tappability. Accessibility failure preserves images with elements:null and elementsError. ' + imageDescription,
     inputSchema: imageInputSchema('capture'),
   },
   responseType: 'mcp',
   async execute(client, args, settings): Promise<CallToolResult> {
     const { path, configuration } = parseImageArguments('capture', args);
-    const result = await captureScreenshot(client, settings, path, configuration);
+    let frame: Awaited<ReturnType<typeof client.captureScreen>> | undefined;
+    const result = await captureScreenshot(client, settings, path, configuration, async output => {
+      frame = await client.captureScreen(output);
+      return frame;
+    });
     try {
-      result.structuredContent = { ...result.structuredContent, elements: parseElements(await client.describeUI()) };
+      if (frame?.elements === undefined) throw new Error(frame?.elementsError ?? 'Accessibility data unavailable.');
+      result.structuredContent = { ...result.structuredContent, elements: parseElements(frame.elements) };
     } catch (error) {
       result.structuredContent = { ...result.structuredContent, elements: null,
         elementsError: `Accessibility data unavailable: ${(error as Error).message}. Use the image or retry capture.` };

@@ -24,7 +24,7 @@ test('type_text rejects invalid modes before executing, including operation chai
 test('Observe editing events validate, preserve target/request/composition, share timeline and cannot claim replayability',()=>{
  const timeline='session_aabbccdd';
  const details={target:{elementId:'title',type:'UITextField',frame:{x:10,y:20,width:300,height:40}},text:'中文🙂',textLength:4,redacted:false,composing:false,source:'agent',requestId:'req'};
- const samples=['editing_begin','text_change','editing_end'].map((type,i)=>({type,time:1000+i*100,timeline,details}));
+ const samples=['editing_begin','text_change','editing_end'].map((type,i)=>({type,timestamp:1000+i*100,timeline,details}));
  const value={timeline,handshake:{type:'ready',timeline,protocol:5,bundleId:'app.test'},samples};
  const parsed=parseObservationSnapshot(JSON.stringify(value),timeline);
  assert.deepEqual(translateTouches(parsed.samples),[]);
