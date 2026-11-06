@@ -1,3 +1,4 @@
+import type { ScreenRead, ReadWindow, CaptureTiming } from '../common/capture.js';
 import { textSizes, deviceControlActions, parseDeviceControl, type TextSize } from '../common/device-control.js';
 import { existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -85,6 +86,15 @@ export function parseSimulatorModels(stdout: string): Map<string, string> {
 export class IDBClient {
   private udid: string | null = null;
   private screenshotScales = new Map<string, { udid: string; scale: number; orientation?: number }>();
+
+  private screenshotTimings = new Map<string, { timestamp: number; captureTiming: CaptureTiming }>();
+  private screenReads: Promise<unknown> = Promise.resolve();
+
+  getScreenshotTiming(path: string) {
+    const timing = this.screenshotTimings.get(resolve(path));
+    this.screenshotTimings.delete(resolve(path));
+    return timing;
+  }
 
   private async displayGeometry(includeHID = false): Promise<(DisplayGeometry & { hidRotation?: number }) | undefined> {
     // Physical-device transport is unchanged; this reader runs only in a simulator.
@@ -381,33 +391,59 @@ export class IDBClient {
   }
 
   async screenshot(outputPath?: string): Promise<string> {
-    if (!this.udid) {
-      throw new Error('No internal device connection. Retry the operation with deviceId.');
-    }
+    return (await this.readScreen(outputPath, false)).path;
+  }
 
+  async captureScreen(outputPath: string): Promise<ScreenRead> {
+    return this.readScreen(outputPath, true);
+  }
+
+  private readScreen(outputPath: string | undefined, includeElements: boolean): Promise<ScreenRead> {
+    // Queue acquisitions per device, not image processing. Bursts never launch
+    // dozens of idb readers against the same simulator at once.
+    const read = this.screenReads.then(() => this.acquireScreen(outputPath, includeElements));
+    this.screenReads = read.catch(() => {});
+    return read;
+  }
+
+  private async acquireScreen(outputPath: string | undefined, includeElements: boolean): Promise<ScreenRead> {
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     const captureUdid = this.udid;
     const path = outputPath || `${process.env.TMPDIR || '/tmp'}/screenshot-${Date.now()}.png`;
-
-    try {
-      const display = await this.displayGeometry();
-      const { stdout } = await run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 });
-      this.screenshotScales.delete(resolve(path));
-      if (display) {
-        const after = await this.displayGeometry();
-        if (JSON.stringify(after) !== JSON.stringify(display)) throw new ToolError('Interface changed during screenshot. Take a fresh capture after rotation settles.', { code: 'DISPLAY_CHANGED_DURING_CAPTURE' });
-      }
-      try {
-        const metadata = JSON.parse(stdout);
-        if (typeof metadata.screen_scale === 'number' && Number.isFinite(metadata.screen_scale) && metadata.screen_scale > 0) {
-          this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale, ...(display ? { orientation: display.orientation } : {}) });
-          if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
-        }
-      } catch { /* Older idb versions can return no metadata. Never guess scale. */ }
-      return path;
-    } catch (error) {
-      if (error instanceof ToolError) throw error;
-      throw new Error(`Failed to take screenshot: ${(error as Error).message}`);
+    const display = await this.displayGeometry();
+    const imageWindow: ReadWindow = { startedAt: 0, finishedAt: 0 };
+    const elementsWindow: ReadWindow = { startedAt: 0, finishedAt: 0 };
+    const timed = async <T>(window: ReadWindow, operation: () => Promise<T>): Promise<T> => {
+      window.startedAt = Date.now();
+      try { return await operation(); }
+      finally { window.finishedAt = Date.now(); }
+    };
+    // Both backend reads start in this phase, before re-reading geometry,
+    // resizing, PNG/JPEG encoding, Base64 conversion or saving timeline media.
+    const reads = await Promise.allSettled([
+      timed(imageWindow, () => run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 })),
+      ...(includeElements ? [timed(elementsWindow, () => this.describeUI())] : []),
+    ]);
+    if (reads[0].status === 'rejected') throw reads[0].reason;
+    const { stdout } = reads[0].value as { stdout: string };
+    this.screenshotScales.delete(resolve(path));
+    if (display) {
+      const after = await this.displayGeometry();
+      if (JSON.stringify(after) !== JSON.stringify(display)) throw new ToolError('Interface changed during capture. Take a fresh capture after rotation settles.', { code: 'DISPLAY_CHANGED_DURING_CAPTURE' });
     }
+    try {
+      const metadata = JSON.parse(stdout);
+      if (typeof metadata.screen_scale === 'number' && Number.isFinite(metadata.screen_scale) && metadata.screen_scale > 0) {
+        this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale, ...(display ? { orientation: display.orientation } : {}) });
+        if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
+      }
+    } catch { /* Older idb versions can return no metadata. Never guess scale. */ }
+    const timing = { timestamp: imageWindow.startedAt, captureTiming: { image: imageWindow, ...(includeElements ? { elements: elementsWindow } : {}) } };
+    this.screenshotTimings.set(resolve(path), timing);
+    if (this.screenshotTimings.size > 32) this.screenshotTimings.delete(this.screenshotTimings.keys().next().value!);
+    const elements = reads[1];
+    return { path, ...timing,
+      ...(elements?.status === 'fulfilled' ? { elements: elements.value as string } : elements?.status === 'rejected' ? { elementsError: (elements.reason as Error).message } : {}) };
   }
 
   async describeUI(): Promise<string> {

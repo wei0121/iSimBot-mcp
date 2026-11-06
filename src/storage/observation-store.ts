@@ -23,7 +23,16 @@ export class ObservationStore {
     try {
       if (!lstatSync(path).isFile()) throw new Error('Observation storage must be a regular JSON file.');
       const value = JSON.parse(readFileSync(path, 'utf8'));
-      if (!Array.isArray(value) || value.some(s => !s || !timelinePattern.test(s.timeline) || !Array.isArray(s.events) || s.events.some((e: StoredEvent) => !e || e.timeline !== s.timeline || !Number.isFinite(e.time)))) throw new Error('Invalid observation array.');
+      if (Array.isArray(value)) for (const session of value) if (session && Array.isArray(session.events)) {
+        if (session.handshake && Number.isFinite(session.handshake.time)) { session.handshake = { ...session.handshake, timestamp: Math.round(session.handshake.time) }; delete session.handshake.time; }
+        session.events = session.events.map((event: any) => {
+          if (!event) return event;
+          const { time, ...rest } = event;
+          return { ...rest, timestamp: event.timestamp ?? (Number.isFinite(time) && Number.isFinite(session.startedAt) ? Math.round(session.startedAt + time * 1000) : undefined),
+            ...(Array.isArray(event.points) ? { points: event.points.map(({ time, ...point }: any) => ({ ...point, timestamp: point.timestamp ?? time })) } : {}) };
+        });
+      }
+      if (!Array.isArray(value) || value.some(s => !s || !timelinePattern.test(s.timeline) || !Array.isArray(s.events) || s.events.some((e: StoredEvent) => !e || e.timeline !== s.timeline || !Number.isFinite(e.timestamp)))) throw new Error('Invalid observation array.');
       return value;
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }
   }
@@ -50,7 +59,7 @@ export class ObservationStore {
     });
   }
   save(session: ObservationSession, state: 'observing' | 'archived') {
-    if (!timelinePattern.test(session.timeline) || session.events.some(e => e.timeline !== session.timeline || !Number.isFinite(e.time))) throw new Error('Invalid observation timeline/events.');
+    if (!timelinePattern.test(session.timeline) || session.events.some(e => e.timeline !== session.timeline || !Number.isFinite(e.timestamp))) throw new Error('Invalid observation timeline/events.');
     this.locked(() => {
       const current = this.read(this.observingPath);
       const history = this.read(this.observationsPath);
@@ -61,7 +70,7 @@ export class ObservationStore {
         if (current.some(s => s.timeline === session.timeline)) this.write(this.observingPath, current.filter(s => s.timeline !== session.timeline));
         return;
       }
-      const value = { ...session, events: withEventIndexes([...session.events].sort((a, b) => a.time - b.time)) };
+      const value = { ...session, events: withEventIndexes([...session.events].sort((a, b) => a.timestamp - b.timestamp)) };
       if (state === 'observing') {
         if (!existsSync(this.observationsPath)) this.write(this.observationsPath, history);
         this.write(this.observingPath, [...current.filter(s => s.timeline !== session.timeline), value]);

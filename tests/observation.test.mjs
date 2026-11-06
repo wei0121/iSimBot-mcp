@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { translateTouches, translateEditing, operationChain, parseObservationSnapshot, observationEvents } from '../dist/operation/observation-events.js';
 import { tools } from '../dist/mcp/registry.js';
-const event=(time,phase,x=10,y=20,id='one')=>({type:'touch',time,touches:[{id,phase,x,y,touchTime:time/1000,tapCount:1}]});
+const event=(timestamp,phase,x=10,y=20,id='one')=>({type:'touch',timestamp,touches:[{id,phase,x,y,touchTimestamp:timestamp,tapCount:1}]});
 
 test('observation preserves actual paths and computes delay between touch starts',()=>{
  const events=[event(1000,0),event(1100,3),event(1900,0),event(2200,1,80,90),event(2500,3,150,200),event(3000,0),event(4000,3)];
@@ -30,7 +30,7 @@ test('JSON snapshots validate handshake and every event timeline; timeline uses 
  assert.throws(()=>parseObservationSnapshot(JSON.stringify(snapshot).slice(0,-1),timeline));
  const events=observationEvents(translateTouches(snapshot.samples),[{type:'capture',captureIndex:0,startedAt:900,endedAt:950}],timeline,500);
  assert.deepEqual(events.map(e=>e.tool),['capture','tap']);
- assert.deepEqual(events.map(e=>e.time),[0.4,0.5]);
+ assert.deepEqual(events.map(e=>e.timestamp),[900,1000]);
  assert.ok(events.every(e=>e.timeline===timeline));
  const chain=operationChain(translateTouches([event(0,0),event(100,3),event(20000,0),event(20100,3)]));
  assert.equal(chain.steps[1].delay,20);assert.equal(chain.replayable,false);
@@ -62,11 +62,17 @@ if(args[1]==='launch'){
  if(input)fs.writeFileSync(path.join(${JSON.stringify(container)},'tmp','isimbot-input-'+input,'ready.json'),JSON.stringify({sessionId:input,bundleId:args[3],protocol:1,pid:process.pid}));
  const folder=path.join(${JSON.stringify(container)},'tmp','isimbot-observation-'+process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE);
  const timeline=process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE;
- fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({timeline,handshake:{type:'ready',timeline,protocol:4,bundleId:args[3],time:Date.now()},samples:[]}));
+ fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({timeline,handshake:{type:'ready',timeline,protocol:4,bundleId:args[3],timestamp:Date.now()},samples:[]}));
 }
 `,{mode:0o755});
  process.env.PATH=`${dir}:${oldPath}`;
  const client={getConnectedDevice:()=> 'device-one',screenshot:async path=>{await sharp({create:{width:4,height:4,channels:3,background:'white'}}).png().toFile(path);return path;},getScreenshotGeometry:()=>({scale:1,udid:'device-one'}),describeUI:async()=> '[]'};
+ client.captureScreen=async path=>{
+  const startedAt=Date.now();const reads=await Promise.allSettled([client.screenshot(path),client.describeUI()]);
+  if(reads[0].status==='rejected')throw reads[0].reason;
+  return {path,timestamp:startedAt,captureTiming:{image:{startedAt,finishedAt:Date.now()},elements:{startedAt,finishedAt:Date.now()}},
+   ...(reads[1].status==='fulfilled'?{elements:reads[1].value}:{elementsError:reads[1].reason.message})};
+ };
  const settings=new ScreenshotSettingsStore(join(dir,'settings.json'));
  const call=(name,args={})=>tools.find(t=>t.definition.name===name).execute(client,args,settings);
  t.after(async()=>{await call('stop_observation');process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
@@ -141,7 +147,7 @@ test('double tap requires UIKit count, nearby coordinates and timing, preserving
  assert.deepEqual(translateTouches(independent).map(g=>g.tool),['tap','tap']);
  const distant=structuredClone(double);distant[2].touches[0].x=100;distant[3].touches[0].x=100;
  assert.deepEqual(translateTouches(distant).map(g=>g.tool),['tap','tap']);
- const delayed=structuredClone(double);delayed[2].time=800;delayed[3].time=880;
+ const delayed=structuredClone(double);delayed[2].timestamp=800;delayed[3].timestamp=880;delayed[2].touches[0].touchTimestamp=800;delayed[3].touches[0].touchTimestamp=880;
  assert.deepEqual(translateTouches(delayed).map(g=>g.tool),['tap','tap']);
 });
 test('scroll requires active scroll recognizer, distinguishes horizontal/vertical drags and ordinary swipe',()=>{

@@ -35,7 +35,7 @@ static void emit(NSDictionary *value) {
 void ISimBotRecordEditing(NSString *type, NSDictionary *details) {
     struct stat lease;
     if (!observing || stat(leasePath.fileSystemRepresentation, &lease) != 0 || time(NULL) - lease.st_mtime > 10) return;
-    emit(@{@"type": type, @"time": @(NSDate.date.timeIntervalSince1970 * 1000), @"details": details});
+    emit(@{@"type": type, @"timestamp": @(llround(NSDate.date.timeIntervalSince1970 * 1000)), @"details": details});
 }
 @implementation UIApplication (ISimBotObservation)
 - (void)isimbot_observation_sendEvent:(UIEvent *)event {
@@ -58,7 +58,7 @@ void ISimBotRecordEditing(NSString *type, NSDictionary *details) {
             }
             [scrollReferences addObject:scrollViews];
             [touches addObject:[@{@"id": [NSString stringWithFormat:@"%p", touch], @"phase": @(touch.phase),
-                @"x": @(point.x), @"y": @(point.y), @"touchTime": @(touch.timestamp), @"tapCount": @(touch.tapCount)} mutableCopy]];
+                @"x": @(point.x), @"y": @(point.y), @"touchTimestamp": @(llround((wallClockOffset + touch.timestamp) * 1000)), @"tapCount": @(touch.tapCount)} mutableCopy]];
         }
     }
     // Preserve touch data before an action can remove its view/window. Read the
@@ -74,7 +74,7 @@ void ISimBotRecordEditing(NSString *type, NSDictionary *details) {
             }
             touches[index][@"scrollViews"] = contexts;
         }
-        emit(@{@"type": @"touch", @"time": @((wallClockOffset + event.timestamp) * 1000), @"touches": touches});
+        emit(@{@"type": @"touch", @"timestamp": @(llround((wallClockOffset + event.timestamp) * 1000)), @"touches": touches});
     }
 }
 + (void)load {
@@ -100,7 +100,7 @@ void ISimBotRecordEditing(NSString *type, NSDictionary *details) {
         Method original = class_getInstanceMethod(self, @selector(sendEvent:));
         Method observer = class_getInstanceMethod(self, @selector(isimbot_observation_sendEvent:));
         method_exchangeImplementations(original, observer);
-        emit(@{@"type": @"ready", @"time": @([NSDate date].timeIntervalSince1970 * 1000), @"protocol": @5,
+        emit(@{@"type": @"ready", @"timestamp": @(llround([NSDate date].timeIntervalSince1970 * 1000)), @"protocol": @6,
             @"bundleId": NSBundle.mainBundle.bundleIdentifier ?: @"", @"pid": @(getpid())});
     }
 }

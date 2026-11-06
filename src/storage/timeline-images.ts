@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 
 export interface StoredCapture {
-  images: { path: string; mimeType: 'image/png' | 'image/jpeg'; sizeBytes: number }[];
+  images: { path: string; mimeType: 'image/png' | 'image/jpeg'; sizeBytes: number; timestamp?: number }[];
   metadata?: CallToolResult['structuredContent'];
 }
 function imageDirectory(directory: string, create = false) {
@@ -30,7 +30,7 @@ export function saveTimelineCapture(directory: string, timeline: string, index: 
       const data = Buffer.from(image.data, 'base64');
       if (capture.images.length >= 2 || data.length > 5_000_000) throw new Error('Capture must contain at most two images, each at most 5 MB.');
       writeFileSync(path, data, { flag: 'wx', mode: 0o600 });
-      capture.images.push({ path, mimeType: image.mimeType, sizeBytes: data.length });
+      capture.images.push({ path, mimeType: image.mimeType, sizeBytes: data.length, ...(typeof result.structuredContent?.timestamp === 'number' ? { timestamp: result.structuredContent.timestamp } : {}) });
     }
     if (!capture.images.length) throw new Error('Timeline capture returned no image.');
     return capture;
