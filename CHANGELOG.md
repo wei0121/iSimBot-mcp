@@ -1,5 +1,11 @@
 # iSimBot-MCP changelog
 
+## 1.0.9
+
+- Change the project license from MIT to Apache-2.0 and credit Weiren Xie in the attribution notice and package metadata.
+- Include LICENSE and NOTICE in release packages and Homebrew installations; update README, contribution guidance and formula license metadata. Third-party licenses remain unchanged.
+- Versions through 1.0.8 retain their original MIT license. No runtime behavior changes.
+
 ## 1.0.8
 
 - Fix `double_tap` by sending both taps in one timed idb HID request. Separate CLI processes added startup/connection delays and could produce two single taps instead of a system-recognized double tap.

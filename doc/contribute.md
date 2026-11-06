@@ -3,6 +3,7 @@
 [Back to README](../README.md)
 
 Bug reports, ideas, documentation improvements and pull requests are welcome.
+Contributions are licensed under Apache-2.0.
 
 ## Issues
 

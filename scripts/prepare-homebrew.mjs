@@ -14,7 +14,7 @@ try {
   const archive = join(output, `${pkg.name}-${pkg.version}.tar.gz`);
   const payload = join(stage, 'package');
   mkdirSync(payload);
-  for (const name of ['dist', 'package.json', 'package-lock.json', 'README.md', 'doc', 'LICENSE']) {
+  for (const name of ['dist', 'package.json', 'package-lock.json', 'README.md', 'doc', 'LICENSE', 'NOTICE']) {
     cpSync(join(root, name), join(payload, name), { recursive: true });
   }
   execFileSync('tar', ['-czf', archive, '-C', stage, 'package']);

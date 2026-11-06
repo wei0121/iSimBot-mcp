@@ -70,4 +70,4 @@ Keep existing MCP entries and restart the client.
 - [Tool registry](src/mcp/registry.ts)
 - [Simulator operations](src/operation/)
 
-MIT — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE). Copyright 2026 Weiren Xie.
