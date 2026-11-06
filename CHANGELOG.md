@@ -1,6 +1,6 @@
 # iSimBot-MCP changelog
 
-## Unreleased
+## 1.0.12
 
 - Read bounded simulator unified logs and return actionable app/path/coordinate errors.
 - Resolve Search Bar editors and include responder diagnostics for unsupported input.
