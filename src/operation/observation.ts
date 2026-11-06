@@ -1,3 +1,4 @@
+import { prepareTextInput, awaitTextInput, releaseTextInput } from './text-input.js';
 import { presentElements, resolveElementDetail, elementDetailSchema, publicEvent } from '../mcp/element-presentation.js';
 import { saveTimelineCapture, readTimelineCapture, deleteTimelineCapture, type StoredCapture } from '../storage/timeline-images.js';
 import { ObservationStore } from '../storage/observation-store.js';
@@ -14,14 +15,18 @@ import type { IDBClient } from './idb-client.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 import type { ScreenshotSettingsStore } from '../setting/screenshot-settings.js';
 import { captureTools } from './capture.js';
-import { operationChain, parseObservationSnapshot, translateTouches, observationEvents, type ObservationSnapshot, type ObservationEvent } from './observation-events.js';
+import { operationChain, parseObservationSnapshot, translateTouches, translateEditing, observationEvents, type ObservationSnapshot, type ObservationEvent } from './observation-events.js';
 
 const exec = promisify(execFile);
 const sessions = new WeakMap<IDBClient, Observation>();
 const liveSessions = new Map<string, Observation>();
 const schedulers = new WeakMap<IDBClient, (task: () => Promise<void>) => Promise<void>>();
 export function setObservationScheduler(client: IDBClient, schedule: (task: () => Promise<void>) => Promise<void>) { schedulers.set(client, schedule); }
-export async function stopClientObservation(client: IDBClient) { return sessions.get(client)?.stop(); }
+export async function stopClientObservation(client: IDBClient, bundleId?: string) {
+  const session = sessions.get(client);
+  if (bundleId && session?.bundleId !== bundleId) return;
+  return session?.stop();
+}
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function simctl(args: string[], env?: NodeJS.ProcessEnv) {
   return exec('xcrun', ['simctl', ...args], { env, timeout: 15000, maxBuffer: 1024 * 1024 });
@@ -63,7 +68,7 @@ class Observation {
     this.store.save({ timeline: this.timeline,
       udid: this.client.getConnectedDevice(), bundleId: this.bundleId, startedAt: this.startedAt, expireAt: this.expireAt,
       captureInterval: this.interval, handshake: this.snapshot?.handshake,
-      events: observationEvents(translateTouches(this.snapshot?.samples ?? []), this.captures, this.timeline, this.startedAt).map(({ captureIndex, ...event }) => ({ ...event, ...(event.tool === 'capture' && captureIndex !== undefined && this.captureData.has(captureIndex) ? { capture: this.captureData.get(captureIndex)! } : {}) })), ...(this.failure ? { error: this.failure } : {}) }, this.active ? 'observing' : 'archived');
+      events: observationEvents([...translateTouches(this.snapshot?.samples ?? []), ...translateEditing(this.snapshot?.samples ?? [])], this.captures, this.timeline, this.startedAt).map(({ captureIndex, ...event }) => ({ ...event, ...(event.tool === 'capture' && captureIndex !== undefined && this.captureData.has(captureIndex) ? { capture: this.captureData.get(captureIndex)! } : {}) })), ...(this.failure ? { error: this.failure } : {}) }, this.active ? 'observing' : 'archived');
     this.savedSignature = signature;
   }
   private readEvents() {
@@ -95,9 +100,10 @@ class Observation {
     try {
       // App termination may legitimately fail if it is not running.
       await simctl(['terminate', udid, this.bundleId]).catch(() => {});
+      const inputEnv = await prepareTextInput(this.client, this.bundleId);
       this.startedAt = Date.now();
       await simctl(['launch', udid, this.bundleId], { ...process.env,
-        SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: resolve(library), SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE: this.timeline });
+        ...inputEnv, SIMCTL_CHILD_DYLD_INSERT_LIBRARIES: resolve(library), SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE: this.timeline });
       const until = Date.now() + 8000;
       let ready = false;
       while (Date.now() < until) {
@@ -108,6 +114,7 @@ class Observation {
         await sleep(100);
       }
       if (!ready) throw new Error('App did not acknowledge the observation framework. It may reject injection or have crashed; no recording is claimed.');
+      await awaitTextInput(this.client);
       this.active = true;
       liveSessions.set(this.timeline, this);
       this.save();
@@ -116,6 +123,7 @@ class Observation {
       this.tick();
       return this.status();
     } catch (error) {
+      releaseTextInput(this.client);
       this.failure = (error as Error).message;
       await this.stop();
       throw error;
@@ -125,7 +133,7 @@ class Observation {
   status() { return { success: !this.failure, timeline: this.timeline, deviceId: this.client.getConnectedDevice(),
     bundleId: this.bundleId, expireAt: this.expireAt, captureInterval: this.interval, active: this.active, captureCount: this.captures.length, directory: this.directory, observingPath: this.store.observingPath, observationsPath: this.store.observationsPath,
     ...(this.failure ? { error: this.failure, recoveryPath: this.source } : {}),
-    scope: 'Experimental app-local touch recording. Restarts the app. No keyboard text, system dialogs or other apps. Includes both human and automation-generated touches; cannot distinguish their origin. Coordinates are device logical points.' }; }
+    scope: 'Experimental app-local touch recording. Restarts the app. Records standard UIKit/SwiftUI editing_begin/text_change/editing_end, including committed text and IME composing state. Password text is redacted. No system dialogs or other apps. Native input remains enabled after stop. Includes both human and automation-generated touches; cannot distinguish their origin. Coordinates are device logical points.' }; }
   private tick() {
     if (!this.active) return;
     if (Date.now() >= this.expireAt) { void this.stop(); return; }
@@ -218,7 +226,7 @@ async function stopExpiredObservations(settings: ScreenshotSettingsStore) {
       if (existsSync(path)) {
         if (statSync(path).size > 16 * 1024 * 1024) throw new Error('Observation event limit reached (16 MB).');
         const snapshot = parseObservationSnapshot(readFileSync(path, 'utf8'), saved.timeline);
-        const gestures = observationEvents(translateTouches(snapshot.samples), [], saved.timeline as TimelineId, saved.startedAt);
+        const gestures = observationEvents([...translateTouches(snapshot.samples), ...translateEditing(snapshot.samples)], [], saved.timeline as TimelineId, saved.startedAt);
         const events = [...saved.events.filter(e => e.tool === 'capture'), ...gestures].sort((a, b) => a.time - b.time);
         final = { ...saved, handshake: snapshot.handshake, events: events.map((e, i) => ({ ...e, delay: e.time - (events[i - 1]?.time ?? 0) })) };
       }
@@ -230,7 +238,7 @@ async function stopExpiredObservations(settings: ScreenshotSettingsStore) {
 }
 const timelineProperty = { type: 'string', description: 'session_xxxxxxxx timeline returned by start_observation. Stored sessions survive MCP restarts.' };
 export const observationTools: ToolDefinition[] = [
-  { definition: { name: 'start_observation', description: 'EXPERIMENTAL: always create a new session (ended sessions cannot resume) and restart an installed simulator app with an in-process touch recorder. No host input monitoring. Records app-local touches and background logical capture at per-session captureInterval (default 0.5 seconds); reads may take longer. Before first touch retain only latest 2 captures. Stops at maxDuration/200 captures/100MB. Does not record keyboard text, system dialogs or other apps. Native framework must be built. App compatibility is not guaranteed.',
+  { definition: { name: 'start_observation', description: 'EXPERIMENTAL: always create a new session (ended sessions cannot resume) and restart an installed simulator app with an in-process touch recorder. No host input monitoring. Records app-local touches and background logical capture at per-session captureInterval (default 0.5 seconds); reads may take longer. Before first touch/editing event retain only latest 2 captures. Stops at maxDuration/200 captures/100MB. Records app-local editing notifications (editing_begin/text_change/editing_end, text and composing state; password values redacted), not raw keyboard keys. Enables native Agent text input. No system dialogs or other apps. Native framework must be built. App compatibility is not guaranteed.',
     inputSchema: { type: 'object', additionalProperties: false, properties: {
       bundleId: { type: 'string' }, maxDuration: { type: 'number', minimum: 1, maximum: 1800, default: 300 },
       captureInterval: { type: 'number', minimum: 0.5, maximum: 10, default: 0.5 },
@@ -241,7 +249,7 @@ export const observationTools: ToolDefinition[] = [
       const session = new Observation(client, settings, args.bundleId as string, args.maxDuration as number ?? 300, args.captureInterval as number ?? 0.5);
       sessions.set(client, session); return session.start();
     } },
-  { definition: { name: 'stop_observation', description: 'Stop the active app observation on this device. Leaves app running; injected hooks become inactive. Records remain on disk. Does not unload the framework; ordinary app relaunch removes it.',
+  { definition: { name: 'stop_observation', description: 'Stop the active app observation on this device. Leaves app running; observation hooks become inactive; native Agent text input remains enabled until ordinary app relaunch or MCP shutdown. Records remain on disk. Does not unload the framework; ordinary app relaunch removes it.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     async execute(client) { return await stopClientObservation(client) ?? { success: true, active: false }; } },
   { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline, raw touch paths and candidate operation_chain. Every event has a zero-based index across all tools; timeline is returned only at the top level. Indexes are stable after archiving; pagination preserves these indexes. time is elapsed seconds, not an identifier. Capture elementDetail defaults to changes against the immediately previous capture in this session, including across pages. number returns a count; list returns compact elements; changes returns appeared/moved/disappeared/updated changeTypes. First capture marks all elements appeared; missing snapshots return elements:null with an error. Missing or duplicate identifiers support exact matches only, so changed anonymous elements appear as removal/addition. A returned empty changes list does not mean pixels are unchanged. Includes at most 2 capture images when includeImages=true. Candidate replay is approximate; unsupported/multitouch gestures remain explicitly marked. Historical screenshot IDs are not valid coordinate references; use logical points.',
