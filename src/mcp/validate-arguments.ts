@@ -13,7 +13,10 @@ export function validateArguments(tool: Pick<ToolDefinition, 'definition' | 'val
     if (rule.type === 'object' ? value === null || typeof value !== 'object' || Array.isArray(value) : rule.type === 'integer' ? !Number.isInteger(value) : rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
       throw new Error(`${tool.definition.name}: invalid argument ${key}`);
     }
-    if (typeof value === 'number' && ((typeof rule.minimum === 'number' && value < rule.minimum) || (typeof rule.maximum === 'number' && value > rule.maximum))) throw new Error(`${tool.definition.name}: ${key} must be between ${rule.minimum} and ${rule.maximum}; received ${value}.`);
+    if (typeof value === 'number' && ((typeof rule.minimum === 'number' && value < rule.minimum) || (typeof rule.maximum === 'number' && value > rule.maximum))) {
+      const bound = typeof rule.minimum === 'number' && typeof rule.maximum === 'number' ? `between ${rule.minimum} and ${rule.maximum}` : typeof rule.minimum === 'number' ? `at least ${rule.minimum}` : `at most ${rule.maximum}`;
+      throw new Error(`${tool.definition.name}: ${key} must be ${bound}; received ${value}.`);
+    }
     if (typeof value === 'string' && (value.includes('\0') || (key !== 'text' && !value.trim()))) throw new Error(`${tool.definition.name}: invalid argument ${key}`);
     if (['udid', 'bundleId'].includes(key) && typeof value === 'string' && value.startsWith('-')) throw new Error(`${tool.definition.name}: invalid argument ${key}`);
     if (rule.format === 'uri' && typeof value === 'string') {

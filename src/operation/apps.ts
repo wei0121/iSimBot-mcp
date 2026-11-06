@@ -79,7 +79,7 @@ export const appsTools: ToolDefinition[] = [
   {
     definition: {
       name: 'terminate_app',
-      description: 'Terminate a running app',
+      description: 'Request app termination. An uninstalled bundle ID is an error; an already stopped app is a no-op. confirmed:false with terminated:null means the backend accepted termination but did not report a reliable stopped state.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -93,9 +93,9 @@ export const appsTools: ToolDefinition[] = [
     },
     async execute(idbClient, args) {
       await stopClientObservation(idbClient, args.bundleId as string);
-      await idbClient.terminateApp(args.bundleId as string);
+      const state = await idbClient.terminateApp(args.bundleId as string);
       releaseTextInput(idbClient, args.bundleId as string);
-      return { success: true, message: `App ${args.bundleId} terminated` };
+      return { success: true, ...state, message: state?.alreadyStopped ? `App ${args.bundleId} was already stopped` : state?.confirmed === false ? `Termination requested for ${args.bundleId}; backend process state is unconfirmed` : `App ${args.bundleId} terminated` };
     },
   },
   {

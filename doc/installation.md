@@ -119,7 +119,7 @@ update the local command path in your client config.
 Uninstall brew with `brew uninstall isimbot-mcp`. To remove the local environment,
 delete `.runtime/` from the checkout. Client config entries are removed separately.
 
-`clean` deletes managed screenshots, completed MP4 recordings, completed chain images and archived observation
+`clean` deletes managed UI snapshots, screenshots, completed MP4 recordings, completed chain images and archived observation
 images in the current installation's storage. Observation JSON remains; deleted
 images are reported as unavailable when requested. Active observation images,
 pending files, custom paths and symbolic links are skipped. Configuration,

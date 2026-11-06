@@ -21,7 +21,7 @@ interface Element {
 type Node = Record<string, unknown>;
 const object = (v: unknown): v is Node => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): string | null => typeof v === 'string' && v !== '' ? v : null;
-function compact(node: Node): Element {
+export function compactElement(node: Node): Element {
   const frame = node.frame;
   const valid = object(frame) && ['x', 'y', 'width', 'height'].every(k => typeof frame[k] === 'number' && Number.isFinite(frame[k]));
   const words = [...new Set([node.label, node.title, node.value].map(text).filter((s): s is string => s !== null))];
@@ -37,7 +37,7 @@ function contentKey(node: Node) {
   return JSON.stringify(['type', 'role', 'label', 'title', 'value', 'enabled'].map(k => node[k] ?? null));
 }
 function difference(current: Node[], previous: Node[]) {
-  const now = current.map(compact), before = previous.map(compact);
+  const now = current.map(compactElement), before = previous.map(compactElement);
   const counts = (items: Element[]) => {
     const result = new Map<string, number>();
     for (const item of items) if (item.elementId) result.set(item.elementId, (result.get(item.elementId) ?? 0) + 1);
@@ -47,17 +47,35 @@ function difference(current: Node[], previous: Node[]) {
   const unique = new Map<string, number>();
   before.forEach((item, i) => { if (item.elementId && previousCounts.get(item.elementId) === 1 && currentCounts.get(item.elementId) === 1) unique.set(item.elementId, i); });
   const signature = (item: Element, raw: Node) => JSON.stringify([item, contentKey(raw)]);
-  // Missing/duplicate IDs support exact matches only; never infer identity from proximity.
+  // Match exact snapshots first. For moved anonymous nodes require unique, nonempty
+  // semantic content AND size across both complete snapshots, never proximity alone.
   const exact = new Map<string, number[]>();
   before.forEach((item, i) => {
     if (item.elementId && unique.has(item.elementId)) return;
     const key = signature(item, previous[i]);
     const entries = exact.get(key) ?? []; entries.push(i); exact.set(key, entries);
   });
+  const mapping = new Map<number, number>();
   const matched = new Set<number>();
-  const changes: Array<Element & { changeTypes: ChangeType[] }> = [];
   now.forEach((item, i) => {
     const oldIndex = item.elementId && unique.has(item.elementId) ? unique.get(item.elementId)! : exact.get(signature(item, current[i]))?.shift();
+    if (oldIndex !== undefined) { mapping.set(i, oldIndex); matched.add(oldIndex); }
+  });
+  const semanticKey = (item: Element, raw: Node) => item.text && item.frame ? JSON.stringify([item.elementId, contentKey(raw), item.frame.width, item.frame.height]) : null;
+  const group = (items: Element[], raw: Node[]) => {
+    const result = new Map<string, number[]>();
+    items.forEach((item, i) => { const key = semanticKey(item, raw[i]); if (key) result.set(key, [...(result.get(key) ?? []), i]); });
+    return result;
+  };
+  const oldGroups = group(before, previous), newGroups = group(now, current);
+  for (const [key, indexes] of newGroups) {
+    const old = oldGroups.get(key);
+    if (indexes.length !== 1 || old?.length !== 1 || mapping.has(indexes[0]) || matched.has(old[0])) continue;
+    mapping.set(indexes[0], old[0]); matched.add(old[0]);
+  }
+  const changes: Array<Element & { changeTypes: ChangeType[] }> = [];
+  now.forEach((item, i) => {
+    const oldIndex = mapping.get(i);
     if (oldIndex === undefined) { changes.push({ ...item, changeTypes: ['appeared'] }); return; }
     matched.add(oldIndex);
     const changeTypes: ChangeType[] = [];
@@ -76,9 +94,9 @@ export function presentElements(raw: CallToolResult['structuredContent'], previo
   const { elements: _rawElements, elementsError, ...metadata } = raw ?? {};
   const current = elements(raw);
   if (detail === 'number') return { metadata, elementCount: current?.length ?? null, ...(elementsError ? { error: String(elementsError) } : {}) };
-  if (detail === 'list') return { metadata, elements: current?.map(compact) ?? null, ...(elementsError ? { error: String(elementsError) } : {}) };
+  if (detail === 'list') return { metadata, elements: current?.map(compactElement) ?? null, ...(elementsError ? { error: String(elementsError) } : {}) };
   if (!current) return { metadata, elements: null, error: elementsError ? String(elementsError) : 'Current capture accessibility elements are unavailable.' };
-  if (!hasPreviousCapture) return { metadata, elements: current.map(node => ({ ...compact(node), changeTypes: ['appeared'] })) };
+  if (!hasPreviousCapture) return { metadata, elements: current.map(node => ({ ...compactElement(node), changeTypes: ['appeared'] })) };
   const baseline = elements(previous);
   if (!baseline) return { metadata, elements: null, error: 'Previous capture accessibility elements are unavailable. Request elementDetail=list for the current snapshot.' };
   return { metadata, elements: difference(current, baseline) };

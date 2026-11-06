@@ -138,8 +138,8 @@ Native input stays enabled after Observe stops, until ordinary relaunch or MCP s
 | --- | --- |
 | `screenshot` | Return an image and metadata; defaults to original pixel dimensions. |
 | `capture` | Return images and accessibility elements; defaults to logical dimensions. |
-| `describe_ui` | Return the current accessibility tree. |
-| `get_logs` | Read device logs. |
+| `describe_ui` | Save the full accessibility tree as local JSON; return up to 50 compact elements by default. Use `snapshotId`, `offset` and `limit` to paginate the same snapshot. `detail: "number"` returns a count; `"raw"` explicitly returns the JSON tree (up to 256 KiB). |
+| `get_logs` | Read simulator unified logs, not MCP logs or Observe records. Defaults: `lastSeconds: 30`, `lines: 100`; optional `process` is an executable name or PID. Not a live stream or guaranteed stdout/stderr capture. |
 
 `capture` elements include labels, identifiers, bounds and center coordinates.
 Their coordinates always use logical points: pass the center directly to `tap`
@@ -204,7 +204,7 @@ Images remain exempt. Long press, swipe and pinch also require their requested
 (or default) duration plus 0.2 seconds. Omitted delays are increased as needed;
 explicit insufficient delays fail with `MIN_OPERATION_DELAY` before any action.
 Actual backend work can take longer, so runtime conflict detection remains.
-Observation timestamps are never changed; replay candidates use the same policy.
+Observation timestamps are recorded as observed and are not constrained by chain execution limits.
 
 ## Recording
 
@@ -247,7 +247,7 @@ automatically; rebuild it after native edits with
 The recorder loads into the selected app at launch; no app source changes,
 macOS input monitoring, or Bonjour discovery are used. It observes both human
 and automated touches, plus standard text-field editing notifications. System
-dialogs, other apps, raw keyboard keys and multi-touch replay are not supported. Multi-touch/cancelled/incomplete gestures
+dialogs, other apps and raw keyboard keys are not observed; multi-touch is not classified. Multi-touch/cancelled/incomplete gestures
 are retained as unsupported records instead of guessed commands.
 
 Capture uses logical size and elements. Before the first touch or editing event, only the latest
@@ -257,13 +257,10 @@ than the interval. Stop limits: 200 retained captures,
 100 MB capture data, 16 MB event data, or `maxDuration`. Sessions are saved under
 `observations` beside the configuration file and are not automatically deleted.
 
-Each page includes candidate `operationChain` steps for that page. Touch paths
-and timing are preserved, but straight swipes approximate curved gestures and
-taps do not reproduce the original hold duration. `replayable` checks command
-limits, not whether replay will have the same UI result. Historical screenshot
-IDs are not live coordinate references. Normal MCP shutdown stops collection;
-a crashed server's recording lease expires after 10 seconds. A normal app
-relaunch removes the injected framework.
+Observation returns recorded events, not a replayable operation chain. Historical
+screenshot IDs are not live coordinate references. Normal MCP shutdown stops
+collection; a crashed server's recording lease expires after 10 seconds. A normal
+app relaunch removes the injected framework.
 
 The handshake confirms recorder loading, not UI readiness; inspect capture or
 accessibility before sending test actions.
@@ -306,8 +303,7 @@ Synchronous Agent input notifications include its `requestId`; other notificatio
 use `app_or_user`, which does not prove human input. Secure fields omit text.
 These instantaneous events have duration 0; focus/blur do not prove typing, and
 there is no reliable "finished typing" event while a user pauses with focus.
-Editing events require manual adaptation before replay; they are not silently
-converted into text commands. Other apps, system keyboards/dialogs and web/custom
+Editing events describe recorded changes; they are not converted into text commands. Other apps, system keyboards/dialogs and web/custom
 editors remain outside observation scope.
 
 Every session has an `events` array. Internally saved events and
@@ -340,8 +336,7 @@ and a separation of at most 20 logical points. Nearby independent taps remain
 separate. Movement in an enabled ancestor `UIScrollView` whose pan recognizer
 actively handles the gesture is `scroll`; other movement is `swipe`. Custom
 scrolling implementations without a `UIScrollView` fall back to `swipe`. Scroll
-direction describes finger movement; replay uses its dominant axis and backend
-default duration. Raw paths/timing remain available. Existing experimental UUID/sessionId records
+direction describes finger movement. Raw paths and timing remain available. Existing experimental UUID/sessionId records
 use the older schema and are not read by the new timeline API.
 
 ## Timeline images and return format
@@ -369,3 +364,33 @@ per-index errors while other indexes continue. No arbitrary paths are accepted.
 Historical images do not provide fresh coordinate references. `isimbot clean`
 removes completed chain images as well as archived observation images, preserving
 catalogs, active/uncataloged images, configuration and custom output paths.
+
+
+`describe_ui` snapshots are saved under `ui/` beside the configuration file.
+Only the latest 200 are retained; `isimbot clean` removes these snapshots along
+with recorded media. `snapshotId` reads a saved snapshot, not the current screen.
+
+Element `changes` first matches unique identifiers, then exact snapshots. Elements
+without stable IDs can be reported as `moved` when their nonempty content, type
+and size match uniquely in both snapshots. Repeated/ambiguous elements remain
+appearance/disappearance pairs. This is a presentation heuristic, not a stable
+identity guarantee; raw saved captures are unchanged.
+
+Enhanced text input supports standard UIKit/SwiftUI editors and a Search Bar's
+underlying `UISearchTextField`. A keyboard on screen alone does not prove the
+focused editor is supported. Input errors include the responder class, target
+identifier and ancestor classes to help diagnose unsupported/custom editors.
+No failed text input is automatically retried.
+
+Display geometry timeouts receive one read-only retry (at most two attempts;
+up to 20 seconds when both interface and display reads are required). Invalid
+geometry is not retried or guessed. Gesture and text commands are not repeated.
+
+If a client omits `enableTextInput`, `installType` or `elementDetail`, check its
+connected server version and refresh its MCP tool list. These parameters are
+published by the server; restarting a different server process does not refresh
+another client's cached definitions.
+
+`terminate_app` rejects uninstalled bundle IDs. If idb accepts termination but
+reports an unknown process state, the result has `confirmed: false` and
+`terminated: null`; it does not claim the app was confirmed stopped.

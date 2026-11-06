@@ -50,8 +50,8 @@ test('anonymous and duplicate IDs never cause fabricated moves or identity merge
  assert.deepEqual(present(same,previous,'changes',true).elements,[]);
  const changed=metadata([node(null),node(null,'Search',50),node('duplicate','First'),node('duplicate','Second',180)]);
  const result=present(changed,previous,'changes',true).elements;
- assert.equal(result.length,4);
- assert.deepEqual(result.map(e=>e.changeTypes),[['appeared'],['appeared'],['disappeared'],['disappeared']]);
+ assert.equal(result.length,3);
+ assert.deepEqual(result.map(e=>e.changeTypes),[['appeared'],['moved'],['disappeared']]);
  assert.equal(result[0].elementId,null);
  // A new identifier is a different element, even with the same text/geometry.
  assert.deepEqual(present(metadata([node('b')]),metadata([node('a')]),'changes',true).elements.map(e=>e.changeTypes),[['appeared'],['disappeared']]);
@@ -140,6 +140,6 @@ test('mixed timeline pagination and element comparison use general event indexes
  const all=await f.call({});assert.deepEqual(all.structuredContent.events.map(e=>e.index),[0,1,2]);
  const paged=await f.call({offset:2,limit:1});const event=paged.structuredContent.events[0];
  assert.equal(event.index,2);assert.equal(event.comparedToIndex,0);assert.deepEqual(event.elements[0].changeTypes,['moved','updated']);
- assert.equal(paged.structuredContent.operationChain.steps[0].index,0);
+ assert.ok(!Object.hasOwn(paged.structuredContent,'operationChain'));
  assert.equal(readFileSync(f.store.observationsPath,'utf8'),before);
 });
