@@ -24,9 +24,11 @@ export const chainLimits = { steps: 20, images: 6, delay: 10, totalDelay: 30 };
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export function minimumInterval(step: Operation, settings: OperationSettings): number {
+  const alias = step.tool === 'device_control' ? ({ rotate: 'rotate', set_location: 'set_location' } as Record<string, string>)[step.arguments.action as string] : undefined;
+  const aliasMinimum = alias ? settings.minDelay[alias] ?? 0 : 0;
   const defaults: Record<string, number> = { long_press: 1, swipe: 0.5, pinch: 0.5 };
   const requested = step.tool in defaults ? Number(step.arguments.duration ?? defaults[step.tool]) : 0;
-  return Math.max(settings.minDelay[step.tool] ?? 0, requested > 0 ? requested + 0.2 : 0);
+  return Math.max(settings.minDelay[step.tool] ?? 0, aliasMinimum, requested > 0 ? requested + 0.2 : 0);
 }
 
 // Used for executable requests and observed replay candidates alike.

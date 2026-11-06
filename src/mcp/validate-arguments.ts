@@ -1,8 +1,8 @@
 import type { ToolDefinition } from './tool-definition.js';
 
-// Existing chainable tools use flat primitive schemas. Validate the whole chain
+// Validate primitive/object shapes and tool-specific constraints for the whole chain
 // before starting, so a typo late in a chain cannot cause earlier side effects.
-export function validateArguments(tool: ToolDefinition, args: Record<string, unknown>): void {
+export function validateArguments(tool: Pick<ToolDefinition, 'definition' | 'validate'>, args: Record<string, unknown>): void {
   const schema = tool.definition.inputSchema;
   for (const key of schema.required || []) {
     if (!(key in args)) throw new Error(`${tool.definition.name}: missing argument ${key}`);
@@ -10,7 +10,7 @@ export function validateArguments(tool: ToolDefinition, args: Record<string, unk
   for (const [key, value] of Object.entries(args)) {
     const rule = schema.properties?.[key] as Record<string, unknown> | undefined;
     if (!rule) throw new Error(`${tool.definition.name}: unknown argument ${key}`);
-    if (rule.type === 'integer' ? !Number.isInteger(value) : rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
+    if (rule.type === 'object' ? value === null || typeof value !== 'object' || Array.isArray(value) : rule.type === 'integer' ? !Number.isInteger(value) : rule.type === 'number' ? typeof value !== 'number' || !Number.isFinite(value) : typeof value !== rule.type) {
       throw new Error(`${tool.definition.name}: invalid argument ${key}`);
     }
     if (typeof value === 'number' && ((typeof rule.minimum === 'number' && value < rule.minimum) || (typeof rule.maximum === 'number' && value > rule.maximum))) throw new Error(`${tool.definition.name}: ${key} must be between ${rule.minimum} and ${rule.maximum}; received ${value}.`);
@@ -22,5 +22,6 @@ export function validateArguments(tool: ToolDefinition, args: Record<string, unk
     }
     if (Array.isArray(rule.enum) && !rule.enum.includes(value)) throw new Error(`${tool.definition.name}: invalid ${key}`);
   }
+  tool.validate?.(args);
 }
 

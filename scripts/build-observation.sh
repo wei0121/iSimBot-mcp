@@ -7,9 +7,20 @@ SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 for ARCH in arm64 x86_64; do
 xcrun --sdk iphonesimulator clang -dynamiclib -fobjc-arc -fmodules \
   -isysroot "$SDK" -target "$ARCH-apple-ios15.0-simulator" \
-  -framework Foundation -framework UIKit "$ROOT/native/observation/observer.m" \
+  -framework Foundation -framework UIKit "$ROOT/native/observation/observer.m" "$ROOT/native/observation/text-input.m" \
   -o "$OUT/isimbot-observer-$ARCH.dylib"
 done
 xcrun lipo -create "$OUT/isimbot-observer-arm64.dylib" "$OUT/isimbot-observer-x86_64.dylib" -output "$OUT/isimbot-observer.dylib"
 rm "$OUT/isimbot-observer-arm64.dylib" "$OUT/isimbot-observer-x86_64.dylib"
 codesign --force --sign - "$OUT/isimbot-observer.dylib"
+
+# Used by screenshots and HID mapping without injecting into the foreground app.
+for ARCH in arm64 x86_64; do
+xcrun --sdk iphonesimulator clang -fobjc-arc -fmodules \
+  -isysroot "$SDK" -target "$ARCH-apple-ios15.0-simulator" \
+  -framework Foundation -framework UIKit "$ROOT/native/display/display-info.m" \
+  -o "$OUT/isimbot-display-$ARCH"
+done
+xcrun lipo -create "$OUT/isimbot-display-arm64" "$OUT/isimbot-display-x86_64" -output "$OUT/isimbot-display"
+rm "$OUT/isimbot-display-arm64" "$OUT/isimbot-display-x86_64"
+codesign --force --sign - "$OUT/isimbot-display"

@@ -1,3 +1,5 @@
+import { deviceControlTools } from '../operation/device-control.js';
+import { rotationTools } from '../operation/rotation.js';
 import { imageTools as savedImageTools } from '../operation/images.js';
 import { observationTools } from '../operation/observation.js';
 import { recordingTools } from '../operation/recording.js';
@@ -16,7 +18,9 @@ import type { ToolDefinition } from './tool-definition.js';
 
 export const tools: ToolDefinition[] = [
   ...deviceTools,
+  ...deviceControlTools,
   ...gesturesTools,
+  ...rotationTools,
   ...inputTools,
   ...appsTools,
   ...recordingTools,

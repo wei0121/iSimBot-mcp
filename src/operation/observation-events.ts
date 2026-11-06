@@ -5,16 +5,32 @@ import { captureTools } from './capture.js';
 import { screenshotTools } from './screenshot.js';
 export interface TouchPoint { id: string; phase: number; x: number; y: number; touchTime: number; tapCount: number; scrollViews?: Array<{id: string; panState: number; offsetX: number; offsetY: number}> }
 export interface TouchEvent { type: 'touch'; time: number; touches: TouchPoint[] }
+export interface EditingEvent {
+  type: 'editing_begin' | 'text_change' | 'editing_end'; time: number;
+  details: { target: { elementId: string | null; type: string; frame: { x: number; y: number; width: number; height: number } };
+    text: string | null; textLength: number; redacted: boolean; composing: boolean; source: 'agent' | 'app_or_user'; requestId?: string };
+}
+export type NativeObservationEvent = TouchEvent | EditingEvent;
+export interface RecordedEditing {
+  type: 'operation'; tool: EditingEvent['type']; arguments: EditingEvent['details']; startedAt: number; endedAt: number;
+}
+export type RecordedAction = RecordedGesture | RecordedEditing;
+export function translateEditing(events: NativeObservationEvent[]): RecordedEditing[] {
+  return events.filter((event): event is EditingEvent => event.type !== 'touch').map(event => ({
+    type: 'operation', tool: event.type, arguments: event.details, startedAt: event.time, endedAt: event.time,
+  }));
+}
 export interface RecordedGesture {
   type: 'operation' | 'unsupported'; startedAt: number; endedAt: number;
-  tool?: string; arguments?: Record<string, number | string>; reason?: string;
+  tool?: string; arguments?: Record<string, unknown>; reason?: string;
   points: Array<{ x: number; y: number; time: number }>;
 }
 // Keep raw points: a straight swipe is an approximation of a possibly curved path.
-export function translateTouches(events: TouchEvent[]): RecordedGesture[] {
+export function translateTouches(events: NativeObservationEvent[]): RecordedGesture[] {
   const active = new Map<string, { start: number; points: RecordedGesture['points']; multi: boolean; scrolling: boolean }>();
   const result: RecordedGesture[] = [];
   for (const event of events) {
+    if (event.type !== 'touch') continue;
     for (const t of event.touches) if (t.phase === 0) active.set(t.id, { start: event.time, points: [], multi: false, scrolling: false });
     if (active.size > 1) for (const state of active.values()) state.multi = true;
     for (const t of event.touches) {
@@ -58,16 +74,26 @@ export function translateTouches(events: TouchEvent[]): RecordedGesture[] {
 export interface ObservationSnapshot {
   timeline: string;
   handshake: { type: 'ready'; timeline: string; protocol: number; bundleId: string; pid?: number };
-  samples: TouchEvent[];
+  samples: NativeObservationEvent[];
 }
 export function parseObservationSnapshot(text: string, timeline: string): ObservationSnapshot {
   const snapshot = JSON.parse(text);
   if (!timelinePattern.test(timeline) || snapshot.timeline !== timeline || !Array.isArray(snapshot.samples)) throw new Error('Observation timeline mismatch or invalid samples.');
   const handshake = snapshot.handshake;
-  if (!handshake || handshake.type !== 'ready' || handshake.timeline !== timeline || handshake.protocol !== 4) throw new Error('Invalid observation handshake/timeline.');
+  if (!handshake || handshake.type !== 'ready' || handshake.timeline !== timeline || ![4, 5].includes(handshake.protocol)) throw new Error('Invalid observation handshake/timeline.');
   for (const e of snapshot.samples) {
     if (e.timeline !== timeline) throw new Error('Observation event timeline mismatch.');
     if (e.type === 'limit') throw new Error('Native touch event limit reached (100000 events).');
+    if (['editing_begin', 'text_change', 'editing_end'].includes(e.type) && handshake.protocol === 5) {
+      const d = e.details;
+      if (!Number.isFinite(e.time) || !d || !d.target || typeof d.target.type !== 'string' ||
+        !(d.target.elementId === null || typeof d.target.elementId === 'string') ||
+        !d.target.frame || !['x', 'y', 'width', 'height'].every(k => Number.isFinite(d.target.frame[k])) ||
+        typeof d.redacted !== 'boolean' || typeof d.composing !== 'boolean' || !Number.isInteger(d.textLength) || d.textLength < 0 ||
+        !(d.redacted ? d.text === null : typeof d.text === 'string' && d.text.length === d.textLength) ||
+        !['agent', 'app_or_user'].includes(d.source) || (d.requestId !== undefined && typeof d.requestId !== 'string')) throw new Error('Invalid observation editing event data');
+      continue;
+    }
     if (e.type !== 'touch' || !Number.isFinite(e.time) || !Array.isArray(e.touches) || e.touches.length > 20 ||
       !e.touches.every((t: TouchPoint) => typeof t.id === 'string' && [0, 1, 2, 3, 4].includes(t.phase) &&
         [t.x, t.y, t.touchTime].every(Number.isFinite) && Number.isInteger(t.tapCount) && t.tapCount >= 0 &&
@@ -81,17 +107,17 @@ export interface ObservationEvent extends OperationRecord {
   captureIndex?: number;
   error?: string;
 }
-export function observationEvents(gestures: RecordedGesture[], captures: Array<{type: 'capture'; captureIndex: number; startedAt: number; endedAt: number; error?: string}>, timeline: TimelineId, startedAt: number): ObservationEvent[] {
+export function observationEvents(gestures: RecordedAction[], captures: Array<{type: 'capture'; captureIndex: number; startedAt: number; endedAt: number; error?: string}>, timeline: TimelineId, startedAt: number): ObservationEvent[] {
   const entries = [
     ...gestures.map(({ type, tool, arguments: args, ...gesture }) => ({ ...gesture, tool: type === 'operation' ? tool! : 'unsupported', arguments: args ?? {} })),
     ...captures.map(({ type, ...frame }) => ({ ...frame, tool: 'capture', arguments: {} })),
   ];
   return withRelativeTiming(entries, timeline, startedAt);
 }
-export function operationChain(source: RecordedGesture[] | OperationRecord[], origin?: number, timing: OperationSettings = defaultOperationSettings) {
+export function operationChain(source: RecordedAction[] | OperationRecord[], origin?: number, timing: OperationSettings = defaultOperationSettings) {
   const timeline = createTimeline('chain');
   const records: OperationRecord[] = source.length && 'startedAt' in source[0]
-    ? observationEvents(source as RecordedGesture[], [], createTimeline('session'), origin ?? (source[0] as RecordedGesture).startedAt)
+    ? observationEvents(source as RecordedAction[], [], createTimeline('session'), origin ?? (source[0] as RecordedAction).startedAt)
     : source as OperationRecord[];
   let previousStart = 0;
   const steps = records.filter(record => record.tool !== 'unsupported').map((record, index) => {

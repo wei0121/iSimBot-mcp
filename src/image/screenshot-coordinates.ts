@@ -6,7 +6,17 @@ import { ToolError } from '../mcp/tool-error.js';
 
 interface Mapping { udid: string; width: number; height: number; x: number; y: number; expires: number }
 const sessions = new WeakMap<IDBClient, Map<string, Mapping>>();
-export function clearScreenshotCoordinates(client: IDBClient) { sessions.delete(client); }
+const epochs = new WeakMap<IDBClient, object>();
+const changing = new WeakSet<IDBClient>();
+export function screenshotCoordinateEpoch(client: IDBClient): object | null {
+  if (changing.has(client)) return null;
+  let epoch = epochs.get(client);
+  if (!epoch) { epoch = {}; epochs.set(client, epoch); }
+  return epoch;
+}
+export function clearScreenshotCoordinates(client: IDBClient) { sessions.delete(client); epochs.set(client, {}); }
+export function beginCoordinateChange(client: IDBClient) { clearScreenshotCoordinates(client); changing.add(client); }
+export function endCoordinateChange(client: IDBClient) { clearScreenshotCoordinates(client); changing.delete(client); }
 
 export function screenshotDevice(client: IDBClient, id: string): string | undefined {
   const mapping = sessions.get(client)?.get(id);
@@ -19,7 +29,8 @@ interface ImageInfo {
   deviceInfo: { screenSize: { width: number; height: number } | null; scale: number | null };
 }
 
-export function registerScreenshot(client: IDBClient, result: CallToolResult, geometry?: ScreenshotGeometry): CallToolResult {
+export function registerScreenshot(client: IDBClient, result: CallToolResult, geometry?: ScreenshotGeometry, epoch: object | null = screenshotCoordinateEpoch(client)): CallToolResult {
+  if (!epoch || epoch !== screenshotCoordinateEpoch(client)) return result;
   if (!geometry || !result.structuredContent) return result;
   const entries = (result.structuredContent.images || [result.structuredContent]) as ImageInfo[];
   for (const entry of entries) {

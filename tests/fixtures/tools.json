@@ -328,10 +328,18 @@
   },
   {
     "name": "type_text",
-    "description": "Type text into the currently focused input field",
+    "description": "Enter text in the focused field. insert (default) replaces the selection or inserts at the cursor; replace replaces the whole field, and text empty with replace clears it. Chinese/Emoji and replace require launch_app enableTextInput:true or start_observation first (explicit app restart), then focus a standard UIKit/SwiftUI field. No clipboard. Plain apps support ASCII insert via idb only. Native success verifies immediate field text, not later business validation.",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "insert",
+            "replace"
+          ],
+          "default": "insert"
+        },
         "text": {
           "type": "string",
           "description": "Text to type"
@@ -368,10 +376,15 @@
   },
   {
     "name": "launch_app",
-    "description": "Launch an app by bundle ID and wait for its process to report Running (up to 10 seconds). Does not guarantee UI or network content is ready.",
+    "description": "Launch an app. enableTextInput:true explicitly restarts it with app-local Unicode/replace/clear support for standard UIKit/SwiftUI editors; does not start Observe. No clipboard or extra permissions. Default launch waits for Running (up to 10s); UI readiness is not guaranteed.",
     "inputSchema": {
       "type": "object",
       "properties": {
+        "enableTextInput": {
+          "type": "boolean",
+          "default": false,
+          "description": "Restart app with native text input enabled."
+        },
         "bundleId": {
           "type": "string",
           "description": "App bundle ID (e.g., com.example.app)"
@@ -587,6 +600,33 @@
         "latitude",
         "longitude"
       ]
+    }
+  },
+  {
+    "name": "rotate",
+    "description": "Set the simulator physical device orientation to an absolute direction and poll readback (up to 5s). portrait is upright; landscape_left/right name device orientation (top of device left/right), not relative turns. The app may lock its interface orientation or still be animating; confirmation is physical orientation, not UI readiness. Use capture afterward. Invalidates previous screenshot coordinate references, including images captured during rotation; take a fresh image before tapping. Works in operation_chain. Requires native idb rotation support; no app injection or GUI permissions.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orientation"
+      ],
+      "properties": {
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "portrait_upside_down",
+            "landscape_left",
+            "landscape_right"
+          ],
+          "description": "Absolute physical orientation: portrait, portrait_upside_down, landscape_left, or landscape_right."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
+        }
+      }
     }
   }
 ]

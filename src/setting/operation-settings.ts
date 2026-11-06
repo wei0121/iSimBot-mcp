@@ -5,9 +5,9 @@ import type { ScreenshotSettingsStore } from './screenshot-settings.js';
 
 export interface OperationSettings { minDelay: Record<string, number> }
 export const defaultOperationSettings: OperationSettings = {
-  minDelay: { tap: 0.4, double_tap: 0.9, long_press: 1.35, swipe: 0.9, scroll: 0.7, pinch: 0.8 },
+  minDelay: { device_control: 1, rotate: 1, tap: 0.4, double_tap: 0.9, long_press: 1.35, swipe: 0.9, scroll: 0.7, pinch: 0.8 },
 };
-const configurableTools = ['tap','double_tap','long_press','swipe','scroll','pinch','press_button','type_text','list_apps','open_url','install_app','launch_app','terminate_app','uninstall_app','describe_ui','get_logs','set_location','start_recording','stop_recording','recording_status'];
+const configurableTools = ['tap','double_tap','long_press','swipe','scroll','pinch','press_button','device_control','rotate','type_text','list_apps','open_url','install_app','launch_app','terminate_app','uninstall_app','describe_ui','get_logs','set_location','start_recording','stop_recording','recording_status'];
 export const minDelaySchema = { type: 'object', additionalProperties: false,
   description: 'Minimum start-to-start interval after each tool before the next non-image command, seconds (0–10). Partial updates merge. Images can run during this interval. Timed gestures also require their requested duration plus 0.2s. Omitted chain delays choose a safe default; explicit insufficient delays fail preflight.',
   properties: Object.fromEntries(configurableTools.map(name => [name, { type: 'number', minimum: 0, maximum: 10 }])),
