@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replace relative event times with Unix-millisecond timestamps across chains, observations and image retrieval; retain second-based delay/duration and compatibility with old observation files.
+- Start image and accessibility reads together before processing; serialize acquisition pairs per device and expose their read windows.
+- Raise operation chains to 100 steps, 30 image calls and 120 seconds of scheduled delays, with a 100 MiB saved-image budget.
+
 - Omit host Mac entries and placeholder device IDs such as `unknown`.
 - Return concise structured errors for missing apps and launch failures in both launch modes.
 - Confirm simulator app termination through launchd instead of relying on idb's `Unknown` state; wait for exit without repeating termination.

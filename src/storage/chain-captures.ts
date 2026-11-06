@@ -5,14 +5,14 @@ import { withDirectoryLock } from './directory-lock.js';
 import type { StoredCapture } from './timeline-images.js';
 import { ScreenshotSettingsStore } from '../setting/screenshot-settings.js';
 
-export interface ChainCapture { index: number; time: number; capture: StoredCapture }
+export interface ChainCapture { index: number; timestamp: number | null; capture: StoredCapture }
 export interface ChainCaptures { timeline: string; udid: string | null; eventCount: number; captures: ChainCapture[] }
 export function chainDirectory(settings: ScreenshotSettingsStore) {
   return join(dirname(settings.path ?? new ScreenshotSettingsStore().path), 'chains');
 }
 function valid(record: ChainCaptures): boolean {
   return !!record && /^chain_[0-9a-f]{8}$/.test(record.timeline) && Number.isInteger(record.eventCount) && record.eventCount >= 0 && Array.isArray(record.captures)
-    && record.captures.every(c => !!c && Number.isInteger(c.index) && c.index >= 0 && c.index < record.eventCount && Number.isFinite(c.time) && Array.isArray(c.capture?.images)
+    && record.captures.every(c => !!c && Number.isInteger(c.index) && c.index >= 0 && c.index < record.eventCount && (c.timestamp === null || Number.isFinite(c.timestamp)) && Array.isArray(c.capture?.images)
       && c.capture.images.every(image => image && typeof image.path === 'string' && ['image/png', 'image/jpeg'].includes(image.mimeType) && Number.isInteger(image.sizeBytes) && image.sizeBytes >= 0))
     && new Set(record.captures.map(c => c.index)).size === record.captures.length;
 }
@@ -23,6 +23,9 @@ export class ChainCaptureStore {
     try {
       if (!lstatSync(this.path).isFile()) throw new Error('Chain catalog must be a regular JSON file.');
       const value = JSON.parse(readFileSync(this.path, 'utf8'));
+      if (Array.isArray(value)) for (const record of value) if (record && Array.isArray(record.captures)) {
+        record.captures = record.captures.map(({ time, ...capture }: any) => ({ ...capture, timestamp: capture.timestamp ?? null, ...(Number.isFinite(time) ? { legacyElapsedSeconds: time } : {}) }));
+      }
       if (!Array.isArray(value) || value.some(v => !valid(v))) throw new Error('Invalid chain capture catalog.');
       return value;
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []; throw error; }

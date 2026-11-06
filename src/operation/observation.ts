@@ -226,8 +226,8 @@ async function stopExpiredObservations(settings: ScreenshotSettingsStore) {
         if (statSync(path).size > 16 * 1024 * 1024) throw new Error('Observation event limit reached (16 MB).');
         const snapshot = parseObservationSnapshot(readFileSync(path, 'utf8'), saved.timeline);
         const gestures = observationEvents([...translateTouches(snapshot.samples), ...translateEditing(snapshot.samples)], [], saved.timeline as TimelineId, saved.startedAt);
-        const events = [...saved.events.filter(e => e.tool === 'capture'), ...gestures].sort((a, b) => a.time - b.time);
-        final = { ...saved, handshake: snapshot.handshake, events: events.map((e, i) => ({ ...e, delay: e.time - (events[i - 1]?.time ?? 0) })) };
+        const events = [...saved.events.filter(e => e.tool === 'capture'), ...gestures].sort((a, b) => a.timestamp - b.timestamp);
+        final = { ...saved, handshake: snapshot.handshake, events: events.map((e, i) => ({ ...e, delay: (e.timestamp - (events[i - 1]?.timestamp ?? saved.startedAt)) / 1000 })) };
       }
     } catch (error) {
       final = { ...saved, error: [saved.error, `Expired session archived from saved data; final native collection unavailable: ${(error as Error).message}. The recording lease expires without refresh.`].filter(Boolean).join(' ') };
@@ -251,7 +251,7 @@ export const observationTools: ToolDefinition[] = [
   { definition: { name: 'stop_observation', description: 'Stop the active app observation on this device. Leaves app running; observation hooks become inactive; native Agent text input remains enabled until ordinary app relaunch or MCP shutdown. Records remain on disk. Does not unload the framework; ordinary app relaunch removes it.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     async execute(client) { return await stopClientObservation(client) ?? { success: true, active: false }; } },
-  { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline and raw touch paths. Records describe observed actions, not executable replay instructions. Every event has a zero-based index across all tools; timeline is returned only at the top level. Indexes are stable after archiving; pagination preserves these indexes. time is elapsed seconds, not an identifier. Capture elementDetail defaults to changes against the immediately previous capture in this session, including across pages. number returns a count; list returns compact elements; changes returns appeared/moved/disappeared/updated changeTypes. First capture marks all elements appeared; missing snapshots return elements:null with an error. Anonymous or duplicate-ID elements can match by unique content and size; ambiguous matches remain removal/addition. A returned empty changes list does not mean pixels are unchanged. Includes at most 2 capture images when includeImages=true. Unsupported/multitouch gestures remain explicitly marked. No candidate operation_chain is generated. Historical screenshot IDs are not valid coordinate references; use logical points.',
+  { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline and raw touch paths. Records describe observed actions, not executable replay instructions. Every event has a zero-based index across all tools; timeline is returned only at the top level. Indexes are stable after archiving; pagination preserves these indexes. timestamp is Unix epoch milliseconds; delay and duration remain seconds. Capture elementDetail defaults to changes against the immediately previous capture in this session, including across pages. number returns a count; list returns compact elements; changes returns appeared/moved/disappeared/updated changeTypes. First capture marks all elements appeared; missing snapshots return elements:null with an error. Anonymous or duplicate-ID elements can match by unique content and size; ambiguous matches remain removal/addition. A returned empty changes list does not mean pixels are unchanged. Includes at most 2 capture images when includeImages=true. Unsupported/multitouch gestures remain explicitly marked. No candidate operation_chain is generated. Historical screenshot IDs are not valid coordinate references; use logical points.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { timeline: timelineProperty,
       offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
       includeImages: { type: 'boolean', default: false },
@@ -296,7 +296,7 @@ export const observationTools: ToolDefinition[] = [
           ...(event.error ? { error: [event.error, presentation.error].filter(Boolean).join(' ') } : {}) };
         if (capture && args.includeImages && images < 2) {
           try {
-            content.push({ type: 'text', text: `Event index ${entry.index}: capture; time ${entry.time}` }, ...readTimelineCapture(store.directory, capture, id));
+            content.push({ type: 'text', text: `Event index ${entry.index}: capture; timestamp ${entry.timestamp}` }, ...readTimelineCapture(store.directory, capture, id));
             images++;
           } catch (error) { return { ...projected, error: [projected.error, `Capture image unavailable: ${(error as Error).message}`].filter(Boolean).join(' ') }; }
         }

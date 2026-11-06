@@ -22,6 +22,12 @@ test('capture attaches elements, screenshot skips reading and uses native dimens
  const path=join(dir,'source.png');await sharp({create:{width:120,height:240,channels:3,background:'#abc'}}).png().toFile(path);
  let reads=0;let failure=false;let empty=false;
  const client={getConnectedDevice:()=> 'device', getScreenshotGeometry:()=>({udid:'device',scale:3}),screenshot:async out=>{copyFileSync(path,out);return out;},describeUI:async()=>{reads++;if(failure)throw Error('unavailable');return JSON.stringify(empty?[]:[element]);}};
+ client.captureScreen=async path=>{
+  const startedAt=Date.now();const reads=await Promise.allSettled([client.screenshot(path),client.describeUI()]);
+  if(reads[0].status==='rejected')throw reads[0].reason;
+  return {path,timestamp:startedAt,captureTiming:{image:{startedAt,finishedAt:Date.now()},elements:{startedAt,finishedAt:Date.now()}},
+   ...(reads[1].status==='fulfilled'?{elements:reads[1].value}:{elementsError:reads[1].reason.message})};
+ };
  const settings=new ScreenshotSettingsStore(join(dir,'settings.json'));
  const tool=tools.find(t=>t.definition.name==='capture');
  const screenshot=tools.find(t=>t.definition.name==='screenshot');
@@ -50,7 +56,7 @@ test('capture attaches elements, screenshot skips reading and uses native dimens
  const chain=tools.find(t=>t.definition.name==='operation_chain');
  const chained=await chain.execute(client,{steps:[{tool:'screenshot',delay:0},{tool:'capture',delay:0}]},settings);
  await assert.rejects(screenshot.execute(client,{includeElements:false},settings),/Unknown/);
- await assert.rejects(chain.execute(client,{steps:Array.from({length:7},(_,i)=>({tool:i%2?'capture':'screenshot',delay:0}))},settings),/6/);
+ await assert.rejects(chain.execute(client,{steps:Array.from({length:31},(_,i)=>({tool:i%2?'capture':'screenshot',delay:0}))},settings),/30/);
  assert.ok(!('elements' in chained.structuredContent.events[0].result));
  assert.deepEqual(chained.structuredContent.events[1].elements,[]);
 });
