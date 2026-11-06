@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChainCaptureStore, chainDirectory, type ChainCapture } from '../storage/chain-captures.js';
-import { saveTimelineCapture, type StoredCapture } from '../storage/timeline-images.js';
+import { saveTimelineCapture, deleteTimelineCapture, type StoredCapture } from '../storage/timeline-images.js';
 import { presentElements, resolveElementDetail, elementDetailSchema, publicEvent } from '../mcp/element-presentation.js';
 import { readOperationSettings } from '../setting/operation-settings.js';
 import { currentRecording } from './recording.js';
@@ -24,23 +24,24 @@ export function createOperationChain(
   operations: ToolDefinition[],
   sleep: (ms: number, signal?: AbortSignal) => Promise<void> = wait,
   now = () => performance.now(),
+  wallNow = () => Date.now(),
 ): ToolDefinition {
   const registry = new Map(operations.filter(t => !excludedChainTools.has(t.definition.name)).map(t => [t.definition.name, t]));
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Run steps on one device. delay is the interval from the PREVIOUS step START to this step START, default at least 0.3 seconds (increased when omitted to satisfy per-tool minDelay); first delay is from chain start. time is seconds from chain start; duration is this operation actual elapsed seconds and never added to delay. capture/screenshot may overlap a running gesture. Explicit delays below per-tool minima fail before any operation. Timed gestures require requested duration plus 0.2 seconds before the next non-image operation. Other overlapping commands fail with OPERATION_TIME_CONFLICT rather than silently waiting. Stops launching steps after failure, then waits for started operations to settle; effects are not rolled back. Up to 20 steps, 6 screenshot/capture calls, delay 0–10 seconds each and 30 seconds total. Top-level elementDetail defaults to changes for capture results; number returns counts and list returns compact elements. Changes compare successive capture steps in this chain by index, never completion order, and return comparedToIndex. First capture marks elements appeared; unavailable snapshots report comparison unavailable. Capture images are saved locally and returned as references; call get_images with timeline and event indexes to view them. Standalone capture is unchanged. Screenshot steps still return images directly. Returns index/tool/arguments/delay/time/duration records in events, with timeline only at the top level. index is the zero-based request step position, independent of completion order; time is not an identifier. Parent IDs use chain_xxxxxxxx. Device lifecycle and observation tools are excluded. A recording started by a failed chain is stopped; existing recordings are preserved.',
+      description: 'Run steps on one device. delay is the interval from the PREVIOUS step START to this step START, default at least 0.3 seconds (increased when omitted to satisfy per-tool minDelay); first delay is from chain start. timestamp is a Unix epoch millisecond integer for command start, not the actual touch instant; delay/duration remain seconds; duration is this operation actual elapsed seconds and never added to delay. capture/screenshot may overlap a running gesture. Explicit delays below per-tool minima fail before any operation. Timed gestures require requested duration plus 0.2 seconds before the next non-image operation. Other overlapping commands fail with OPERATION_TIME_CONFLICT rather than silently waiting. Stops launching steps after failure, then waits for started operations to settle; effects are not rolled back. Up to 100 steps, 30 screenshot/capture calls, delay 0–10 seconds each and 120 seconds total; saved capture images are capped at 100 MiB and inline screenshot responses at 16 MB Base64. Top-level elementDetail defaults to changes for capture results; number returns counts and list returns compact elements. Changes compare successive capture steps in this chain by index, never completion order, and return comparedToIndex. First capture marks elements appeared; unavailable snapshots report comparison unavailable. Capture images are saved locally and returned as references; call get_images with timeline and event indexes to view them. Standalone capture is unchanged. Screenshot steps still return images directly. Returns index/tool/arguments/delay/timestamp/duration records in events, with timeline only at the top level. index is the zero-based request step position, independent of completion order; timestamp is not an identifier. Parent IDs use chain_xxxxxxxx. Device lifecycle and observation tools are excluded. A recording started by a failed chain is stopped; existing recordings are preserved.',
       inputSchema: { type: 'object', additionalProperties: false, required: ['steps'], properties: {
         elementDetail: { ...elementDetailSchema, description: 'Element presentation for capture steps, shared with get_observation. changes compares full captures in step-index order within this chain; screenshot steps do not reset the baseline.' },
-        steps: { type: 'array', minItems: 1, maxItems: 20, items: {
+        steps: { type: 'array', minItems: 1, maxItems: 100, items: {
           type: 'object', additionalProperties: false, required: ['tool'], properties: {
             timeline: { type: 'string', description: 'Optional source session_xxxxxxxx or chain_xxxxxxxx. Execution assigns a new chain timeline.' },
             index: { type: 'integer', minimum: 0, description: 'Optional source event index (metadata only). Execution assigns zero-based indexes in request order.' },
             tool: { type: 'string', enum: [...registry.keys()] },
             arguments: { type: 'object', description: 'Tool arguments. arguments.duration, when supported, is the requested gesture duration.' },
             delay: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Seconds from previous operation START; first step from chain start. Does not include duration. Explicit values below the previous non-image tool minimum fail preflight. Images do not reset the previous-command interval.' },
-            time: { type: 'number', minimum: 0, description: 'Optional source time: must equal cumulative delays. Returned time is the actual start time relative to chain start.' },
-            duration: { type: 'number', minimum: 0, description: 'Optional source duration (metadata only). Returned duration is this operation actual elapsed time; it does not affect delay.' },
+            timestamp: { type: 'integer', minimum: 0, description: 'Optional source Unix millisecond timestamp, metadata only. Scheduling uses delay; returned timestamp is the command start on the epoch clock, not actual touch injection.' },
+            duration: { type: 'number', minimum: 0, description: 'Optional source duration (metadata only). Returned duration is this operation actual elapsed seconds; it does not affect delay.' },
           },
         } },
       } },
@@ -55,13 +56,15 @@ export function createOperationChain(
       const images = new Map<number, CallToolResult['content']>();
       const pending: Promise<void>[] = [];
       const storedCaptures = new Map<number, StoredCapture>();
-      let busy = false, imageBytes = 0, failed = false;
+      let busy = false, imageBytes = 0, savedImageBytes = 0, failed = false;
       let ownedRecording: ReturnType<typeof currentRecording>;
       let recordingCleanup: unknown;
       let signalFailure!: () => void;
       const failure = new Promise<void>(resolve => { signalFailure = resolve; });
       const origin = now();
+      const epochOrigin = wallNow();
       let previousStart = origin;
+      let previousTimestamp = epochOrigin;
       for (const [index, step] of steps.entries()) {
         if (failed) break;
         // Start-to-start scheduling: elapsed work is not added to the interval.
@@ -73,11 +76,13 @@ export function createOperationChain(
         }
         if (failed) break;
         const startedAt = now();
-        const record = { ...step, time: (startedAt - origin) / 1000, delay: (startedAt - previousStart) / 1000, duration: 0 };
+        const timestamp = Math.round(epochOrigin + startedAt - origin);
+        const record = { ...step, timestamp, delay: (timestamp - previousTimestamp) / 1000, duration: 0 };
+        previousTimestamp = timestamp;
         previousStart = startedAt;
         const image = imageTools.has(step.tool);
         if (!image && busy) {
-          outcomes[index] = { ...record, success: false, code: 'OPERATION_TIME_CONFLICT', error: 'Previous non-image operation is still running at this requested start time. Increase delay or move the operation; no automatic postponement was performed.' };
+          outcomes[index] = { ...record, success: false, code: 'OPERATION_TIME_CONFLICT', error: 'Previous non-image operation is still running at this requested start timestamp. Increase delay or move the operation; no automatic postponement was performed.' };
           failed = true; signalFailure(); break;
         }
         if (!image) busy = true;
@@ -95,7 +100,14 @@ export function createOperationChain(
             if (tool.responseType === 'mcp') {
               const response = result as CallToolResult;
               if (step.tool === 'capture' && !response.isError) {
-                storedCaptures.set(index, saveTimelineCapture(chainDirectory(settings), timeline, index, response));
+                const saved = saveTimelineCapture(chainDirectory(settings), timeline, index, response);
+                const bytes = saved.images.reduce((sum, image) => sum + image.sizeBytes, 0);
+                if (savedImageBytes + bytes > 100 * 1024 * 1024) {
+                  deleteTimelineCapture(chainDirectory(settings), saved);
+                  throw new Error('Chain saved capture images exceed 100 MiB. Use logical mode or fewer captures.');
+                }
+                savedImageBytes += bytes;
+                storedCaptures.set(index, saved);
               }
               const returnedContent = step.tool === 'capture' ? response.content.filter(c => c.type !== 'image') : response.content;
               const bytes = returnedContent.reduce((sum, item) => sum + (item.type === 'image' ? item.data.length : 0), 0);
@@ -129,7 +141,7 @@ export function createOperationChain(
       // comparisons and use request indexes even when captures finish out of order.
       let previousCapture: { index: number; metadata: CallToolResult['structuredContent'] } | undefined;
       const rawEvents = outcomes.filter((step): step is OperationRecord & Record<string, unknown> => step !== undefined);
-      const captures: ChainCapture[] = rawEvents.filter(e => storedCaptures.has(e.index)).map(e => ({ index: e.index, time: e.time, capture: storedCaptures.get(e.index)! }));
+      const captures: ChainCapture[] = rawEvents.filter(e => storedCaptures.has(e.index)).map(e => ({ index: e.index, timestamp: e.timestamp, capture: storedCaptures.get(e.index)! }));
       if (captures.length) {
         try { new ChainCaptureStore(chainDirectory(settings)).save({ timeline, udid: client.getConnectedDevice?.() ?? null, eventCount: rawEvents.length, captures }); }
         catch (error) { failed = true; rawEvents[0].storageError = `Could not save image catalog: ${(error as Error).message}. Images remain in ${chainDirectory(settings)}.`; }
@@ -146,7 +158,7 @@ export function createOperationChain(
         return { ...event, ...comparison, images: storedCaptures.get(step.index)?.images ?? [], ...presentation,
           ...(event.error ? { error: [event.error, presentation.error].filter(Boolean).join(' ') } : {}) };
       });
-      const summary = { timeline, elementDetail, success: !failed, totalEvents: completed.length, events: completed, skippedSteps: steps.length - completed.length,
+      const summary = { timeline, timestamp: epochOrigin, elementDetail, success: !failed, totalEvents: completed.length, events: completed, skippedSteps: steps.length - completed.length,
         ...(recordingCleanup ? { recordingCleanup } : {}),
         ...(failed ? { note: 'Stopped launching steps after failure; already started operations were allowed to finish. Nothing was rolled back.' } : {}),
       };

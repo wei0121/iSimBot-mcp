@@ -40,8 +40,8 @@ test('observations use the same image reader, general event indexes, and retain 
  const {directory,settings}=fixture(t),timeline='session_1234abcd',store=new ObservationStore(join(directory,'observations'));
  const capture=saveTimelineCapture(store.directory,timeline,8,{content:[image('observed')],structuredContent:raw(0)});
  store.save({timeline,udid:'offline-device',bundleId:'test.app',startedAt:1,expireAt:2,captureInterval:0.5,events:[
-  {timeline,index:0,tool:'tap',arguments:{x:1,y:1},time:0,delay:0,duration:0.1,points:[{x:1,y:1,time:0}]},
-  {timeline,index:1,tool:'capture',arguments:{},time:0.5,delay:0.5,duration:0.2,capture},
+  {timeline,index:0,tool:'tap',arguments:{x:1,y:1},timestamp:0,delay:0,duration:0.1,points:[{x:1,y:1,timestamp:0}]},
+  {timeline,index:1,tool:'capture',arguments:{},timestamp:0.5,delay:0.5,duration:0.2,capture},
  ]},'archived');
  const before=readFileSync(store.observationsPath,'utf8'),offline=await offlineClient(settings);
  try{const result=await offline.client.callTool({name:'get_images',arguments:{timeline,indexes:[1]}});assert.ok(!result.isError);assert.equal(Buffer.from(result.content.find(c=>c.type==='image').data,'base64').toString(),'observed');assert.equal(readFileSync(store.observationsPath,'utf8'),before);}finally{await offline.close();}
@@ -52,13 +52,13 @@ test('get_images bounds batches, rejects arbitrary paths and does not disclose a
  for(const args of [{timeline:'../secret',indexes:[0]},{timeline:'chain_1234abcd',indexes:[]},{timeline:'chain_1234abcd',indexes:[0,0]},{timeline:'chain_1234abcd',indexes:[-1]},{timeline:'chain_1234abcd',indexes:[1.5]},{timeline:'chain_1234abcd',indexes:[0,1,2,3,4,5,6]},{timeline:'chain_1234abcd',indexes:[0],path:'/tmp/secret'}]) await assert.rejects(tool.execute({},args,settings));
  const chains=join(directory,'chains'),owner='chain_1234abcd',other='chain_87654321';
  const capture=saveTimelineCapture(chains,other,0,{content:[image('other timeline')],structuredContent:raw(0)});
- new ChainCaptureStore(chains).save({timeline:owner,udid:null,eventCount:1,captures:[{index:0,time:0,capture}]});
+ new ChainCaptureStore(chains).save({timeline:owner,udid:null,eventCount:1,captures:[{index:0,timestamp:0,capture}]});
  const result=await tool.execute({},{timeline:owner,indexes:[0]},settings);assert.equal(result.isError,true);assert.equal(result.content.filter(c=>c.type==='image').length,0);
 });
 
 test('both-mode image count limits report partial results instead of silently truncating a capture',async t=>{
  const {directory,settings}=fixture(t),timeline='chain_1234abcd',chains=join(directory,'chains');
- const captures=Array.from({length:4},(_,index)=>({index,time:index,capture:saveTimelineCapture(chains,timeline,index,{content:[image(`${index}-logical`),image(`${index}-pixel`)],structuredContent:raw(index)})}));
+ const captures=Array.from({length:4},(_,index)=>({index,timestamp:index,capture:saveTimelineCapture(chains,timeline,index,{content:[image(`${index}-logical`),image(`${index}-pixel`)],structuredContent:raw(index)})}));
  new ChainCaptureStore(chains).save({timeline,udid:null,eventCount:4,captures});
  const result=await tools.find(t=>t.definition.name==='get_images').execute({},{timeline,indexes:[0,1,2,3]},settings);
  assert.equal(result.structuredContent.partial,true);assert.deepEqual(result.structuredContent.events.map(e=>e.success),[true,true,true,false]);assert.equal(result.content.filter(c=>c.type==='image').length,6);
@@ -67,7 +67,7 @@ test('both-mode image count limits report partial results instead of silently tr
 test('clean removes completed chain images but preserves catalog, pending media and user files',async t=>{
  const {directory,settings}=fixture(t),chains=join(directory,'chains'),timeline='chain_1234abcd';
  const capture=saveTimelineCapture(chains,timeline,0,{content:[image('completed')],structuredContent:raw(0)});
- new ChainCaptureStore(chains).save({timeline,udid:null,eventCount:1,captures:[{index:0,time:0,capture}]});
+ new ChainCaptureStore(chains).save({timeline,udid:null,eventCount:1,captures:[{index:0,timestamp:0,capture}]});
  const pending=saveTimelineCapture(chains,'chain_87654321',0,{content:[image('pending')],structuredContent:raw(0)});
  const custom=join(chains,'images','custom.png');writeFileSync(custom,'keep');
  const catalog=readFileSync(join(chains,'captures.json'),'utf8');const result=cleanCache(settings);
@@ -77,7 +77,7 @@ test('clean removes completed chain images but preserves catalog, pending media 
 test('image batches enforce encoded byte budget without corrupting saved media',async t=>{
  const {directory,settings}=fixture(t),timeline='chain_aabbccdd',chains=join(directory,'chains');
  const data=Buffer.alloc(4_100_000,1).toString('base64');
- const captures=Array.from({length:3},(_,index)=>({index,time:index,capture:saveTimelineCapture(chains,timeline,index,{content:[{type:'image',mimeType:'image/png',data}],structuredContent:raw(index)})}));
+ const captures=Array.from({length:3},(_,index)=>({index,timestamp:index,capture:saveTimelineCapture(chains,timeline,index,{content:[{type:'image',mimeType:'image/png',data}],structuredContent:raw(index)})}));
  new ChainCaptureStore(chains).save({timeline,udid:null,eventCount:3,captures});
  const result=await tools.find(t=>t.definition.name==='get_images').execute({},{timeline,indexes:[0,1,2]},settings);
  assert.equal(result.structuredContent.partial,true);assert.equal(result.content.filter(c=>c.type==='image').length,2);

@@ -82,6 +82,7 @@ test('MCP setup configures subsequent image responses, survives server recreatio
   const settingsPath = join(dir, 'settings.json');
   await sharp({ create: { width: 200, height: 400, channels: 3, background: 'white' } }).png().toFile(path);
   const fake = { getConnectedDevice:()=> 'device', getScreenshotGeometry: () => ({udid:'device',scale:2}), screenshot: async output => { copyFileSync(path, output); return output; } };
+  fake.captureScreen=async output=>{await fake.screenshot(output);return {path:output,timestamp:Date.now(),captureTiming:{image:{startedAt:Date.now(),finishedAt:Date.now()}},elementsError:'Accessibility unavailable'};};
   for (const restart of [false, true]) {
     const server = createServer(fake, new ScreenshotSettingsStore(settingsPath));
     const client = new Client({ name: 'test', version: '1' });

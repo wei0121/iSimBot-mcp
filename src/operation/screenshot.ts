@@ -1,3 +1,4 @@
+import type { ScreenRead } from '../common/capture.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { registerScreenshot, screenshotCoordinateEpoch } from '../image/screenshot-coordinates.js';
 import type { IDBClient } from './idb-client.js';
@@ -6,30 +7,39 @@ import { historyDirectory, settingsSchema, validateSettings, type ScreenshotSett
 import { beginScreenshot, pruneScreenshots } from '../storage/screenshot-history.js';
 import { screenshotResult } from '../mcp/screenshot-response.js';
 
-export async function captureScreenshot(client: IDBClient, settings: ScreenshotSettingsStore, outputPath?: string, overrides: Partial<Omit<ScreenshotSettings, 'maxSavedImages'>> = {}) {
+export async function captureScreenshot(client: IDBClient, settings: ScreenshotSettingsStore, outputPath?: string, overrides: Partial<Omit<ScreenshotSettings, 'maxSavedImages'>> = {}, read?: (path: string) => Promise<ScreenRead>) {
+  let frame: ScreenRead | undefined;
+  const acquire = async (path: string) => {
+    if (read) { frame = await read(path); return frame.path; }
+    return client.screenshot(path);
+  };
+  const annotate = (result: CallToolResult, path: string) => {
+    const timing = client.getScreenshotTiming?.(path) ?? (frame ? { timestamp: frame.timestamp, captureTiming: frame.captureTiming } : undefined);
+    return timing ? { ...result, structuredContent: { ...result.structuredContent, ...timing } } : result;
+  };
   const coordinateEpoch = screenshotCoordinateEpoch(client);
   const configuration = { ...settings.read(), ...validateSettings(overrides) };
   if (outputPath !== undefined) {
     if (typeof outputPath !== 'string' || !outputPath.trim()) throw new Error('path must be a non-empty string');
-    const path = await client.screenshot(outputPath);
+    const path = await acquire(outputPath);
     const geometry = client.getScreenshotGeometry?.(path);
-    return registerScreenshot(client, await screenshotResult(path, configuration, geometry, client.getConnectedDevice?.()), geometry, coordinateEpoch);
+    return annotate(registerScreenshot(client, await screenshotResult(path, configuration, geometry, client.getConnectedDevice?.()), geometry, coordinateEpoch), path);
   }
   const dir = historyDirectory(settings);
   const capture = beginScreenshot(dir);
   const pending = capture.pending;
   try {
-    await client.screenshot(pending);
+    await acquire(pending);
     // Finish reading the image before exposing it to cleanup by other calls.
     const geometry = client.getScreenshotGeometry?.(pending);
     const result = await screenshotResult(pending, configuration, geometry, client.getConnectedDevice?.());
     capture.commit();
     pruneScreenshots(dir, settings.read().maxSavedImages);
-    return registerScreenshot(client, result, geometry, coordinateEpoch);
+    return annotate(registerScreenshot(client, result, geometry, coordinateEpoch), pending);
   } finally { capture.discard(); }
 }
 
-export const imageDescription = 'Images are returned in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]}. screenSize is in logical points; imageSize in pixels. Pass screenshotId with image-pixel coordinates to gestures for conversion. References expire after 5 minutes, newest 20 per device; recapture after rotation/navigation. Default PNG, 5 MB per image; never silently resize to meet the byte limit. Format, quality and maxBytes use saved settings unless overridden for this call.';
+export const imageDescription = 'Images are returned in content and metadata in structuredContent. Single mode: {screenshotId, mode, imageSize, deviceInfo: {deviceId, screenSize, scale}}. Both: {images: [logical metadata, pixel metadata]}. screenSize is in logical points; imageSize in pixels. Pass screenshotId with image-pixel coordinates to gestures for conversion. References expire after 5 minutes, newest 20 per device; recapture after rotation/navigation. Default PNG, 5 MB per image; never silently resize to meet the byte limit. Format, quality and maxBytes use saved settings unless overridden for this call. timestamp is the image backend-read start in Unix milliseconds; captureTiming records backend startedAt/finishedAt windows before image encoding.';
 
 export function imageInputSchema(name: 'screenshot' | 'capture'): ToolDefinition['definition']['inputSchema'] {
   return {
