@@ -103,7 +103,7 @@ test('recording does not hold device queues; devices record independently and cl
   await manager.execute({definition:{name:'test_operation',inputSchema:{type:'object',properties:{}}},execute:async()=>{operated=true;}},{deviceId:'A'},settings);
   assert.equal(operated,true);
   const chain = await manager.execute(createOperationChain(recordingTools), {deviceId:'A',steps:[{tool:'recording_status',delay:0}]},settings);
-  assert.deepEqual(JSON.parse(chain.content[0].text).steps[0].result,chain.structuredContent.steps[0].result);
+  assert.deepEqual(JSON.parse(chain.content[0].text).events[0].result,chain.structuredContent.events[0].result);
   await manager.close();
   for (const client of clients) {
     const result=await status.execute(client);
@@ -169,7 +169,7 @@ test('chain accepts a custom recording path and still records to a temporary fil
     {tool:'stop_recording',delay:0.5},
   ]},{path:join(dir,'config','settings.json')});
   assert.equal(result.structuredContent.success,true);
-  assert.equal(result.structuredContent.steps[1].result.path,path);
+  assert.equal(result.structuredContent.events[1].result.path,path);
   assert.equal(readFileSync(path,'utf8'),'finalized-video');
   assert.notEqual(JSON.parse(readFileSync(join(dir,'args'))).at(-1),path);
   assert.equal(existsSync(join(dir,'config','recordings')),false);

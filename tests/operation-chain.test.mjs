@@ -23,7 +23,7 @@ function fixture() {
   const client = { tap: async (...args) => events.push(['tap', ...args]) };
   return { events, chain, client };
 }
-test('screenshots and waits are sequential and all images are returned with step labels', async () => {
+test('screenshots and waits are sequential and all images are returned with event index labels', async () => {
   const { chain, client, events } = fixture();
   const result = await chain.execute(client, { steps: [
     { tool: 'screenshot' },
@@ -32,11 +32,13 @@ test('screenshots and waits are sequential and all images are returned with step
   ] }, {});
   assert.deepEqual(events, ['wait:300', 'screenshot', 'wait:300', ['tap', 10, 20], 'wait:300', 'screenshot']);
   assert.deepEqual(result.content.filter(item => item.type === 'image').map(item => item.data), ['image-1', 'image-2']);
-  assert.match(result.content[1].text, /Step 1: screenshot/);
-  assert.match(result.content[3].text, /Step 3: screenshot/);
+  assert.match(result.content[1].text, /Event index 0: screenshot/);
+  assert.match(result.content[3].text, /Event index 2: screenshot/);
   const summary = JSON.parse(result.content[0].text);
   assert.equal(summary.success, true);
-  assert.equal(summary.steps.length, 3);
+  assert.equal(summary.events.length, 3);
+  assert.deepEqual(summary.events.map(e=>e.index),[0,1,2]);
+  assert.ok(summary.events.every(e=>!Object.hasOwn(e,'step')));
 });
 test('preflight rejects invalid late steps before any action', async () => {
   for (const bad of [
@@ -63,7 +65,8 @@ test('failure stops subsequent steps and retains earlier images and outcomes', a
   assert.equal(result.isError, true);
   const summary = JSON.parse(result.content[0].text);
   assert.equal(summary.skippedSteps, 1);
-  assert.equal(summary.steps[1].error, 'tap failed');
+  assert.equal(summary.events[1].error, 'tap failed');
+  assert.deepEqual(summary.events.map(e=>e.index),[0,1]);
   assert.equal(result.content.filter(item => item.type === 'image').length, 1);
   assert.deepEqual(events, ['wait:300', 'screenshot', 'wait:300']);
 });
@@ -93,19 +96,19 @@ test('capture starts while a gesture is running, and results retain start order'
   ]);
   const result=await chain.execute({}, {steps:[{tool:'swipe',delay:0},{tool:'capture',delay:0.02}]}, {});
   assert.equal(result.structuredContent.success,true);
-  const [swipe,capture]=result.structuredContent.steps;
+  const [swipe,capture]=result.structuredContent.events;
   assert.deepEqual(starts,['swipe','capture']);
   assert.ok(capture.time < swipe.time + swipe.duration);
   assert.ok(Math.abs(capture.delay-(capture.time-swipe.time)) < 1e-9);
-  assert.match(swipe.timeline,/^chain_[0-9a-f]{8}$/);
-  assert.equal(swipe.timeline,capture.timeline);
+  assert.match(result.structuredContent.timeline,/^chain_[0-9a-f]{8}$/);
+  assert.ok(!Object.hasOwn(swipe,'timeline') && !Object.hasOwn(capture,'timeline'));
 });
 test('conflicting non-image operations fail without running the second gesture',async()=>{
   let calls=0;
   const chain=createOperationChain([{definition:{name:'tap',inputSchema:{type:'object',properties:{}}},execute:async()=>{calls++;await new Promise(r=>setTimeout(r,500));return {success:true};}}]);
   const result=await chain.execute({}, {steps:[{tool:'tap',delay:0},{tool:'tap',delay:0.4},{tool:'tap',delay:0.4}]}, {});
   assert.equal(calls,1);assert.equal(result.isError,true);
-  assert.equal(result.structuredContent.steps[1].code,'OPERATION_TIME_CONFLICT');
+  assert.equal(result.structuredContent.events[1].code,'OPERATION_TIME_CONFLICT');
   assert.equal(result.structuredContent.skippedSteps,1);
 });
 test('source time must agree with start-to-start delays before actions run',async()=>{
@@ -120,4 +123,14 @@ test('failure of an in-flight image cancels a later scheduled wait without launc
    (ms,signal)=>new Promise(resolve=>{signal.addEventListener('abort',()=>{aborted=true;resolve();},{once:true});}));
  const result=await chain.execute({}, {steps:[{tool:'capture',delay:0},{tool:'capture',delay:10}]}, {});
  assert.equal(result.isError,true);assert.equal(calls,1);assert.equal(aborted,true);assert.equal(result.structuredContent.skippedSteps,1);
+});
+
+test('chain indexes follow request order even when images complete out of order',async()=>{
+ let release;const first=new Promise(r=>{release=r;});let calls=0;
+ const capture={definition:{name:'capture',inputSchema:{type:'object',properties:{}}},responseType:'mcp',execute:async()=>{
+  if(calls++===0)await first;else release();return {content:[{type:'image',mimeType:'image/png',data:'aGk='}]};
+ }};
+ const chain=createOperationChain([capture],async()=>{});
+ const result=await chain.execute({}, {steps:[{tool:'capture',index:8,delay:0},{tool:'capture',index:12,delay:0}]},{});
+ assert.equal(result.structuredContent.success,true);assert.deepEqual(result.structuredContent.events.map(e=>e.index),[0,1]);
 });

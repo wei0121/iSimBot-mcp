@@ -11,6 +11,7 @@ export interface Operation {
 }
 export interface OperationRecord extends Operation {
   timeline: TimelineId;
+  index: number;
   time: number;
   delay: number;
   duration: number;
@@ -18,7 +19,7 @@ export interface OperationRecord extends Operation {
 export const timelinePattern = /^(session|chain)_[0-9a-f]{8}$/;
 export function createTimeline(kind: 'session' | 'chain'): TimelineId { return `${kind}_${randomBytes(4).toString('hex')}`; }
 export const imageTools = new Set(['capture', 'screenshot']);
-export const excludedChainTools = new Set(['start_observation', 'stop_observation', 'get_observation', 'setup', 'operation_chain', 'boot_simulator', 'shutdown_simulator', 'list_devices']);
+export const excludedChainTools = new Set(['get_images', 'start_observation', 'stop_observation', 'get_observation', 'setup', 'operation_chain', 'boot_simulator', 'shutdown_simulator', 'list_devices']);
 export const chainLimits = { steps: 20, images: 6, delay: 10, totalDelay: 30 };
 const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -36,7 +37,8 @@ export function prepareSteps(raw: unknown, operations: ToolDefinition[], timelin
   let sourceTimeline: unknown;
   let previousCommand: OperationRecord | undefined;
   const steps = raw.map((item, index): OperationRecord => {
-    if (!object(item) || Object.keys(item).some(key => !['timeline', 'tool', 'arguments', 'delay', 'time', 'duration'].includes(key))) throw new Error(`Invalid step ${index + 1}`);
+    if (!object(item) || Object.keys(item).some(key => !['timeline', 'index', 'tool', 'arguments', 'delay', 'time', 'duration'].includes(key))) throw new Error(`Invalid step ${index + 1}`);
+    if (item.index !== undefined && (!Number.isInteger(item.index) || (item.index as number) < 0)) throw new Error(`Invalid index at step ${index + 1}`);
     if (typeof item.tool !== 'string' || !registry.has(item.tool)) throw new Error(`Unsupported tool at step ${index + 1}: ${item.tool}`);
     const args = item.arguments === undefined ? {} : item.arguments;
     if (!object(args)) throw new Error(`Invalid arguments at step ${index + 1}`);
@@ -58,7 +60,7 @@ export function prepareSteps(raw: unknown, operations: ToolDefinition[], timelin
       if (item.timeline !== sourceTimeline) throw new Error('All input steps must belong to the same timeline.');
     }
     validateArguments(registry.get(item.tool)!, args);
-    const step = { timeline, tool: item.tool, arguments: args, delay, time, duration: 0 };
+    const step = { timeline, index, tool: item.tool, arguments: args, delay, time, duration: 0 };
     if (!imageTools.has(step.tool)) previousCommand = step;
     return step;
   });
@@ -67,11 +69,16 @@ export function prepareSteps(raw: unknown, operations: ToolDefinition[], timelin
   return steps;
 }
 
+/** Shared zero-based position for every event, independent of its tool or time. */
+export function withEventIndexes<T>(entries: T[]): Array<T & { index: number }> {
+  return entries.map((entry, index) => ({ ...entry, index }));
+}
+
 export function withRelativeTiming<T extends Operation & { startedAt: number; endedAt: number }>(entries: T[], timeline: TimelineId, origin: number): Array<Omit<T, 'startedAt' | 'endedAt'> & OperationRecord> {
   let previousStart = origin;
-  return [...entries].sort((a, b) => a.startedAt - b.startedAt).map(({ startedAt, endedAt, ...entry }) => {
+  return withEventIndexes([...entries].sort((a, b) => a.startedAt - b.startedAt).map(({ startedAt, endedAt, ...entry }) => {
     const result = { ...entry, timeline, time: (startedAt - origin) / 1000, delay: (startedAt - previousStart) / 1000, duration: Math.max(0, (endedAt - startedAt) / 1000) };
     previousStart = startedAt;
     return result;
-  });
+  }));
 }

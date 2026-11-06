@@ -5,7 +5,7 @@ export const deviceTools: ToolDefinition[] = [
   {
     definition: {
       name: 'list_devices',
-      description: 'List all available iOS simulators and devices',
+      description: 'List available iOS simulators and devices with boot state, runtime (OS version) and model (actual simulator type, independent of its name). Unknown runtime/model values are null. Entries without a UDID are omitted.',
       inputSchema: {
         type: 'object',
         properties: {},

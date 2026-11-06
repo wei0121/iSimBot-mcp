@@ -65,3 +65,19 @@ test('launch passes selected UDID before bundle ID and never interprets shell sy
   const calls=readFileSync(log,'utf8').trim().split('\n').map(line=>JSON.parse(line));
   assert.deepEqual(calls,[['launch','--udid','chosen-device','--foreground-if-running',bundleId],['list-apps','--udid','chosen-device','--json','--fetch-process-state']]);
 });
+
+test('list_apps defaults to user installation type and supports all/system in direct and chain calls', async () => {
+ const list=tools.find(t=>t.definition.name==='list_apps');
+ const apps=[{bundleId:'com.apple.user-example',installType:'user'},
+   {bundleId:'third.party.system-example',installType:'system'},
+   {bundleId:'custom.uppercase',installType:'User'},
+   {bundleId:'unknown',installType:null}];
+ let calls=0;const client={listApps:async()=>{calls++;return apps;}};
+ assert.deepEqual((await list.execute(client,{},{})).apps,[apps[0],apps[2]]);
+ assert.deepEqual((await list.execute(client,{installType:'system'},{})).apps,[apps[1]]);
+ assert.deepEqual((await list.execute(client,{installType:'all'},{})).apps,apps);
+ const before=calls;
+ await assert.rejects(list.execute(client,{installType:'invalid'},{}));assert.equal(calls,before);
+ const chain=await tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'list_apps',arguments:{installType:'system'},delay:0}]},{});
+ assert.deepEqual(chain.structuredContent.events[0].result.apps,[apps[1]]);
+});

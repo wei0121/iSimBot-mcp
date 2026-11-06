@@ -35,6 +35,8 @@ export interface Device {
   name: string;
   state: string;
   type: string;
+  runtime: string | null;
+  model: string | null;
 }
 
 export function parseDevices(stdout: string): Device[] {
@@ -44,10 +46,32 @@ export function parseDevices(stdout: string): Device[] {
     ? JSON.parse(text)
     : text.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line));
   if (!Array.isArray(parsed)) throw new Error('Invalid device list');
-  return parsed.map((device: any) => ({
-    udid: device.udid, name: device.name, state: device.state,
+  return parsed.filter(device => device && typeof device.udid === 'string' && device.udid.trim()).map((device: any) => ({
+    udid: device.udid.trim(), name: device.name, state: device.state,
     type: device.type || 'simulator',
+    runtime: typeof device.os_version === 'string' && device.os_version.trim() ? device.os_version.trim() : null,
+    model: null,
   }));
+}
+
+
+// Resolve the actual simulator type by UDID, never by its user-editable name.
+export function parseSimulatorModels(stdout: string): Map<string, string> {
+  const inventory = JSON.parse(stdout);
+  if (!inventory || !Array.isArray(inventory.devicetypes) || !inventory.devices || typeof inventory.devices !== 'object' || Array.isArray(inventory.devices)) throw new Error('Invalid simulator model inventory');
+  const types = new Map<string, string>();
+  for (const type of inventory.devicetypes) {
+    if (type && typeof type.identifier === 'string' && typeof type.name === 'string' && type.name.trim()) types.set(type.identifier, type.name);
+  }
+  const models = new Map<string, string>();
+  for (const group of Object.values(inventory.devices)) {
+    if (!Array.isArray(group)) continue;
+    for (const device of group) {
+      const model = device && types.get(device.deviceTypeIdentifier);
+      if (model && typeof device.udid === 'string') models.set(device.udid.toUpperCase(), model);
+    }
+  }
+  return models;
 }
 
 export class IDBClient {
@@ -65,7 +89,16 @@ export class IDBClient {
   async listDevices(): Promise<Device[]> {
     try {
       const { stdout } = await run('idb', ['list-targets', '--json']);
-      return parseDevices(stdout);
+      const devices = parseDevices(stdout);
+      if (!devices.some(device => device.type === 'simulator')) return devices;
+      try {
+        const inventory = await run('xcrun', ['simctl', 'list', '--json']);
+        const models = parseSimulatorModels(inventory.stdout);
+        return devices.map(device => ({ ...device, model: device.type === 'simulator' ? models.get(device.udid.toUpperCase()) ?? null : null }));
+      } catch {
+        // Listing devices remains usable when CoreSimulator cannot supply models.
+        return devices;
+      }
     } catch (error) {
       throw new Error(`Failed to list devices: ${(error as Error).message}`);
     }

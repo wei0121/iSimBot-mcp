@@ -4,11 +4,15 @@ export const appsTools: ToolDefinition[] = [
   {
     definition: {
       name: 'list_apps',
-      description: 'List installed apps on the selected device, including bundleId, name, installType and processState. Does not launch apps.',
-      inputSchema: { type: 'object', properties: {} },
+      description: 'List installed apps on the selected device, including bundleId, name, installType and processState. Defaults to user-installed apps, excluding system/unknown installation types. Set installType to all for every app or system for system apps only. Does not launch apps.',
+      inputSchema: { type: 'object', additionalProperties: false, properties: {
+        installType: { type: 'string', enum: ['user', 'system', 'all'], default: 'user', description: 'Filter by backend installation type; all includes unknown types.' },
+      } },
     },
-    async execute(idbClient) {
-      return { success: true, apps: await idbClient.listApps() };
+    async execute(idbClient, args) {
+      const installType = args.installType as 'user' | 'system' | 'all' | undefined ?? 'user';
+      const apps = await idbClient.listApps();
+      return { success: true, apps: installType === 'all' ? apps : apps.filter(app => app.installType?.toLowerCase() === installType) };
     },
   },
   {

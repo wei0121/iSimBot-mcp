@@ -78,10 +78,10 @@ export function parseObservationSnapshot(text: string, timeline: string): Observ
 export interface ObservationEvent extends OperationRecord {
   points?: RecordedGesture['points'];
   reason?: string;
-  index?: number;
+  captureIndex?: number;
   error?: string;
 }
-export function observationEvents(gestures: RecordedGesture[], captures: Array<{type: 'capture'; index: number; startedAt: number; endedAt: number; error?: string}>, timeline: TimelineId, startedAt: number): ObservationEvent[] {
+export function observationEvents(gestures: RecordedGesture[], captures: Array<{type: 'capture'; captureIndex: number; startedAt: number; endedAt: number; error?: string}>, timeline: TimelineId, startedAt: number): ObservationEvent[] {
   const entries = [
     ...gestures.map(({ type, tool, arguments: args, ...gesture }) => ({ ...gesture, tool: type === 'operation' ? tool! : 'unsupported', arguments: args ?? {} })),
     ...captures.map(({ type, ...frame }) => ({ ...frame, tool: 'capture', arguments: {} })),
@@ -94,10 +94,10 @@ export function operationChain(source: RecordedGesture[] | OperationRecord[], or
     ? observationEvents(source as RecordedGesture[], [], createTimeline('session'), origin ?? (source[0] as RecordedGesture).startedAt)
     : source as OperationRecord[];
   let previousStart = 0;
-  const steps = records.filter(record => record.tool !== 'unsupported').map(record => {
+  const steps = records.filter(record => record.tool !== 'unsupported').map((record, index) => {
     const delay = record.time - previousStart;
     previousStart = record.time;
-    return { timeline, tool: record.tool, arguments: record.arguments, delay, time: record.time, duration: record.duration };
+    return { index, tool: record.tool, arguments: record.arguments, delay, time: record.time, duration: record.duration };
   });
   let error: string | undefined;
   try {

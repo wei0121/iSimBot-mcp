@@ -1,3 +1,4 @@
+import { ChainCaptureStore } from './chain-captures.js';
 import { existsSync, lstatSync, readdirSync, unlinkSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ScreenshotSettingsStore, historyDirectory } from '../setting/screenshot-settings.js';
@@ -49,11 +50,23 @@ export function cleanCache(settings = new ScreenshotSettingsStore()) {
   // Read both indices before deleting anything; only archived session media qualify.
   const archived = timelines('observations.json');
   const observing = timelines('observing.json');
+  const chains = join(configDirectory, 'chains');
+  const chainImages = new Set<string>();
+  if (regularDirectory(chains)) {
+    // Validate catalog before deleting any files, and do not follow catalog paths.
+    const path = join(chains, 'captures.json');
+    try {
+      if (!lstatSync(path).isFile()) throw new Error('Chain catalog must be a regular file.');
+      const records = new ChainCaptureStore(chains).list();
+      for (const record of records) for (const capture of record.captures) for (const image of capture.capture.images) chainImages.add(image.path);
+    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+  }
   cleanDirectory(historyDirectory(settings), name => managedScreenshot.test(name));
   cleanDirectory(join(configDirectory, 'recordings'), name => managedRecording.test(name));
   if (regularDirectory(observations)) cleanDirectory(join(observations, 'images'), name => {
     const match = observationImage.exec(name);
     return !!match && archived.has(match[1]) && !observing.has(match[1]);
   });
+  if (regularDirectory(chains)) cleanDirectory(join(chains, 'images'), name => /^chain_[0-9a-f]{8}-capture-\d{6}-\d+\.(png|jpeg)$/.test(name) && chainImages.has(join(chains, 'images', name)));
   return result;
 }

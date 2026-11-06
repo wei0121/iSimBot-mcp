@@ -212,7 +212,7 @@ test('short IDs are returned in both and chain screenshot metadata alongside the
   const settings=new ScreenshotSettingsStore(join(dir,'settings.json'));
   const id=(await run('list_devices')).find(d=>d.udid==='A').deviceId;
   const result=await manager.execute(tools.find(t=>t.definition.name==='operation_chain'),{deviceId:id,steps:[{tool:'screenshot',arguments:{mode:'both'},delay:0}]},settings);
-  for(const entry of result.structuredContent.steps[0].result.images){
+  for(const entry of result.structuredContent.events[0].result.images){
     assert.equal(entry.deviceInfo.deviceId,id);assert.equal(entry.deviceInfo.udid,'A');
     await run('tap',{deviceId:id,screenshotId:entry.screenshotId,x:2,y:2});
   }

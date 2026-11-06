@@ -9,7 +9,7 @@ import { ToolError } from '../mcp/tool-error.js';
 import { clearScreenshotCoordinates, screenshotDevice } from '../image/screenshot-coordinates.js';
 
 const lifecycle = new Set(['boot_simulator', 'shutdown_simulator']);
-const globalTools = new Set(['list_devices', 'setup']);
+const globalTools = new Set(['list_devices', 'setup', 'get_images']);
 
 // Routing parameters belong to the MCP boundary, not individual device operations.
 export function deviceToolDefinition(tool: ToolDefinition) {
@@ -56,6 +56,9 @@ export class DeviceManager {
       value.deviceInfo = { ...value.deviceInfo, deviceId: this.shortId(udid), udid };
     }
     if (Array.isArray(value.images)) value.images.forEach((entry: unknown) => this.exposeDeviceInfo(entry));
+    if (value.metadata) this.exposeDeviceInfo(value.metadata);
+    if (value.result) this.exposeDeviceInfo(value.result);
+    if (Array.isArray(value.events)) value.events.forEach((entry: unknown) => this.exposeDeviceInfo(entry));
     if (Array.isArray(value.steps)) value.steps.forEach((step: any) => this.exposeDeviceInfo(step.result));
   }
 

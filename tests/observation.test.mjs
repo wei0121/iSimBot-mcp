@@ -28,7 +28,7 @@ test('JSON snapshots validate handshake and every event timeline; timeline uses 
  assert.equal(parseObservationSnapshot(JSON.stringify(snapshot),timeline).samples.length,2);
  for(const bad of [ {...snapshot,timeline:'other'}, {...snapshot,handshake:{...snapshot.handshake,timeline:'other'}}, {...snapshot,samples:[{...snapshot.samples[0],timeline:'other'}]} ]) assert.throws(()=>parseObservationSnapshot(JSON.stringify(bad),timeline),/timeline/);
  assert.throws(()=>parseObservationSnapshot(JSON.stringify(snapshot).slice(0,-1),timeline));
- const events=observationEvents(translateTouches(snapshot.samples),[{type:'capture',index:0,startedAt:900,endedAt:950}],timeline,500);
+ const events=observationEvents(translateTouches(snapshot.samples),[{type:'capture',captureIndex:0,startedAt:900,endedAt:950}],timeline,500);
  assert.deepEqual(events.map(e=>e.tool),['capture','tap']);
  assert.deepEqual(events.map(e=>e.time),[0.4,0.5]);
  assert.ok(events.every(e=>e.timeline===timeline));
@@ -68,14 +68,14 @@ if(args[1]==='launch'){
  const settings=new ScreenshotSettingsStore(join(dir,'settings.json'));
  const call=(name,args={})=>tools.find(t=>t.definition.name===name).execute(client,args,settings);
  t.after(async()=>{await call('stop_observation');process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
- const started=await call('start_observation',{bundleId:'dev.example.test',maxDuration:1});
+ const started=await call('start_observation',{bundleId:'dev.example.test',maxDuration:2});
  assert.equal(started.active,true);
- assert.ok(started.expireAt > Date.now() && started.expireAt <= Date.now()+1000);
+ assert.ok(started.expireAt > Date.now() && started.expireAt <= Date.now()+2000);
  assert.equal(started.captureInterval,0.5);
  await assert.rejects(call('start_observation',{bundleId:'dev.example.test'}),/already active/);
  const source=join(container,'tmp',readdirSync(join(container,'tmp'))[0]);
  assert.equal(existsSync(join(source,'active')),true);
- await new Promise(r=>setTimeout(r,1400));
+ await new Promise(r=>setTimeout(r,2400));
  assert.equal(existsSync(join(source,'active')),false);
  const result=await call('get_observation',{timeline:started.timeline,includeImages:true});
  assert.equal(result.structuredContent.active,false);
@@ -89,6 +89,10 @@ if(args[1]==='launch'){
  assert.ok(!JSON.stringify(saved).includes('base64'));
  assert.ok(saved.events.filter(e=>e.capture).every(e=>!Object.hasOwn(e.capture,'content')));
  assert.ok(saved.events.every(e=>e.timeline===started.timeline && e.tool==='capture'));
+ assert.deepEqual(saved.events.map(e=>e.index),saved.events.map((_,i)=>i));
+ assert.ok(saved.events.every(e=>!Object.hasOwn(e,'captureIndex')));
+ const last=saved.events.at(-1);
+ assert.ok(Number(last.capture.images[0].path.match(/capture-(\d+)-/)[1])>last.index);
  assert.equal(saved.handshake.timeline,started.timeline);
  assert.equal(existsSync(join(started.directory,'events.jsonl')),false);
  assert.ok(Array.isArray(result.structuredContent.events));
@@ -152,4 +156,11 @@ test('scroll requires active scroll recognizer, distinguishes horizontal/vertica
  horizontal[1].touches[0].scrollViews=[{id:'horizontal',panState:1,offsetX:40,offsetY:0}];
  assert.equal(translateTouches(horizontal)[0].arguments.direction,'right');
  assert.equal(translateTouches(horizontal)[0].arguments.distance,250);
+});
+
+test('observation event indexes span gestures and captures while private capture counters retain file identity',()=>{
+ const timeline='session_aabbccdd';
+ const gestures=translateTouches([event(1000,0),event(1600,3)]);
+ const events=observationEvents(gestures,[{type:'capture',captureIndex:8,startedAt:900,endedAt:950},{type:'capture',captureIndex:9,startedAt:1200,endedAt:1250}],timeline,500);
+ assert.deepEqual(events.map(e=>[e.index,e.tool,e.captureIndex]),[[0,'capture',8],[1,'long_press',undefined],[2,'capture',9]]);
 });
