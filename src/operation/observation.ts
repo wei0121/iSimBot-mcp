@@ -3,7 +3,6 @@ import { presentElements, resolveElementDetail, elementDetailSchema, publicEvent
 import { saveTimelineCapture, readTimelineCapture, deleteTimelineCapture, type StoredCapture } from '../storage/timeline-images.js';
 import { ObservationStore } from '../storage/observation-store.js';
 import { tmpdir } from 'node:os';
-import { readOperationSettings } from '../setting/operation-settings.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createTimeline, timelinePattern, withEventIndexes, type TimelineId } from '../common/operation.js';
@@ -15,7 +14,7 @@ import type { IDBClient } from './idb-client.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 import type { ScreenshotSettingsStore } from '../setting/screenshot-settings.js';
 import { captureTools } from './capture.js';
-import { operationChain, parseObservationSnapshot, translateTouches, translateEditing, observationEvents, type ObservationSnapshot, type ObservationEvent } from './observation-events.js';
+import { parseObservationSnapshot, translateTouches, translateEditing, observationEvents, type ObservationSnapshot, type ObservationEvent } from './observation-events.js';
 
 const exec = promisify(execFile);
 const sessions = new WeakMap<IDBClient, Observation>();
@@ -252,7 +251,7 @@ export const observationTools: ToolDefinition[] = [
   { definition: { name: 'stop_observation', description: 'Stop the active app observation on this device. Leaves app running; observation hooks become inactive; native Agent text input remains enabled until ordinary app relaunch or MCP shutdown. Records remain on disk. Does not unload the framework; ordinary app relaunch removes it.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
     async execute(client) { return await stopClientObservation(client) ?? { success: true, active: false }; } },
-  { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline, raw touch paths and candidate operation_chain. Every event has a zero-based index across all tools; timeline is returned only at the top level. Indexes are stable after archiving; pagination preserves these indexes. time is elapsed seconds, not an identifier. Capture elementDetail defaults to changes against the immediately previous capture in this session, including across pages. number returns a count; list returns compact elements; changes returns appeared/moved/disappeared/updated changeTypes. First capture marks all elements appeared; missing snapshots return elements:null with an error. Missing or duplicate identifiers support exact matches only, so changed anonymous elements appear as removal/addition. A returned empty changes list does not mean pixels are unchanged. Includes at most 2 capture images when includeImages=true. Candidate replay is approximate; unsupported/multitouch gestures remain explicitly marked. Historical screenshot IDs are not valid coordinate references; use logical points.',
+  { definition: { name: 'get_observation', description: 'Read a saved observation, automatically stopping and archiving it first if still running: paginated timeline and raw touch paths. Records describe observed actions, not executable replay instructions. Every event has a zero-based index across all tools; timeline is returned only at the top level. Indexes are stable after archiving; pagination preserves these indexes. time is elapsed seconds, not an identifier. Capture elementDetail defaults to changes against the immediately previous capture in this session, including across pages. number returns a count; list returns compact elements; changes returns appeared/moved/disappeared/updated changeTypes. First capture marks all elements appeared; missing snapshots return elements:null with an error. Anonymous or duplicate-ID elements can match by unique content and size; ambiguous matches remain removal/addition. A returned empty changes list does not mean pixels are unchanged. Includes at most 2 capture images when includeImages=true. Unsupported/multitouch gestures remain explicitly marked. No candidate operation_chain is generated. Historical screenshot IDs are not valid coordinate references; use logical points.',
     inputSchema: { type: 'object', additionalProperties: false, properties: { timeline: timelineProperty,
       offset: { type: 'integer', minimum: 0, default: 0 }, limit: { type: 'integer', minimum: 1, maximum: 100, default: 100 },
       includeImages: { type: 'boolean', default: false },
@@ -307,7 +306,7 @@ export const observationTools: ToolDefinition[] = [
         active: sessions.get(client)?.timeline === id && sessions.get(client)!.active,
         interrupted: saved.observing && sessions.get(client)?.timeline !== id,
         error: metadata.error, totalEvents: recordedEvents.length, offset, nextOffset: offset + page.length < recordedEvents.length ? offset + page.length : null,
-        events, operationChain: { ...operationChain(page, undefined, readOperationSettings(settings)), scope: 'Steps in this page only; first delay equals the first step time relative to session start. Other delays are recomputed between retained starts.' } };
+        events };
       return { content: [{ type: 'text', text: JSON.stringify(summary) }, ...content], structuredContent: summary };
     } },
 ];

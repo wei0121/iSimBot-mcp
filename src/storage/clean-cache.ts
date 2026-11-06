@@ -1,3 +1,4 @@
+import { uiDirectory, uiSnapshotName } from './ui-snapshots.js';
 import { ChainCaptureStore } from './chain-captures.js';
 import { existsSync, lstatSync, readdirSync, unlinkSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -61,6 +62,7 @@ export function cleanCache(settings = new ScreenshotSettingsStore()) {
       for (const record of records) for (const capture of record.captures) for (const image of capture.capture.images) chainImages.add(image.path);
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
+  cleanDirectory(uiDirectory(settings), name => uiSnapshotName.test(name));
   cleanDirectory(historyDirectory(settings), name => managedScreenshot.test(name));
   cleanDirectory(join(configDirectory, 'recordings'), name => managedRecording.test(name));
   if (regularDirectory(observations)) cleanDirectory(join(observations, 'images'), name => {

@@ -26,7 +26,7 @@ export const inputTools: ToolDefinition[] = [
   {
     definition: {
       name: 'type_text',
-      description: 'Enter text in the focused field. insert (default) replaces the selection or inserts at the cursor; replace replaces the whole field, and text empty with replace clears it. Chinese/Emoji and replace require launch_app enableTextInput:true or start_observation first (explicit app restart), then focus a standard UIKit/SwiftUI field. No clipboard. Plain apps support ASCII insert via idb only. Native success verifies immediate field text, not later business validation.',
+      description: 'Enter text in the focused field. insert (default) replaces the selection or inserts at the cursor; replace replaces the whole field, and text empty with replace clears it. Chinese/Emoji and replace require launch_app enableTextInput:true or start_observation first (explicit app restart), then focus a standard UIKit/SwiftUI field or UISearchBar search field. Unsupported fields return responder class and target diagnostics; a visible keyboard alone does not prove support. No clipboard. Plain apps support ASCII insert via idb only. Native success verifies immediate field text, not later business validation.',
       inputSchema: {
         type: 'object',
         properties: {

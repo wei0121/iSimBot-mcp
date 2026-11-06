@@ -1,6 +1,9 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ScreenshotSettingsStore } from '../dist/setting/screenshot-settings.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -14,6 +17,7 @@ test('stdio entry point publishes the expected tool schemas', async () => {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
     assert.equal(listed.length, 33);
+    for(const [name,key] of [['launch_app','enableTextInput'],['list_apps','installType'],['operation_chain','elementDetail'],['get_observation','elementDetail']]) assert.ok(listed.find(t=>t.name===name).inputSchema.properties[key],`${name}.${key} must be published`);
     for (const name of ['start_observation', 'stop_observation', 'get_observation', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status']) {
       assert.equal(listed.find(t => t.name === name).inputSchema.properties.deviceId.type, 'string');
     }
@@ -26,9 +30,10 @@ test('MCP dispatch reaches all 20 non-image handlers with shared client and reta
   const fake = new Proxy({}, { get: (_, method) => method === 'getConnectedDevice' ? () => 'device' : async (...args) => {
     calls.push([method, args]);
     if (method === 'connect' && args[0] === 'fail') throw new Error('connection failed');
-    return ['listDevices', 'listApps'].includes(method) ? [] : 'sample';
+    return ['listDevices', 'listApps'].includes(method) ? [] : method==='describeUI' ? '[]' : 'sample';
   } });
-  const server = createServer(fake, undefined, () => fake);
+  const directory=mkdtempSync(join(tmpdir(),'isimbot-dispatch-'));
+  const server = createServer(fake, new ScreenshotSettingsStore(join(directory,'screenshot.json')), () => fake);
   const client = new Client({ name: 'test', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair();
   try {
@@ -51,7 +56,7 @@ test('MCP dispatch reaches all 20 non-image handlers with shared client and reta
       ...['launch', 'terminate', 'uninstall'].map(verb => [`${verb}_app`, { bundleId: 'app.id' }, `${verb}App`, ['app.id']]),
       
       ['describe_ui', {}, 'describeUI', []],
-      ['get_logs', {}, 'getLogs', [undefined]],
+      ['get_logs', {}, 'getLogs', [undefined,undefined,undefined]],
       ['set_location', { latitude: 1, longitude: 2 }, 'setLocation', [1, 2]],
       ['shutdown_simulator', { udid: 'device' }, 'shutdownSimulator', ['device']],
     ];
@@ -69,5 +74,5 @@ test('MCP dispatch reaches all 20 non-image handlers with shared client and reta
       assert.equal(result.isError, true);
       assert.deepEqual(JSON.parse(result.content[0].text), { success: false, error: message });
     }
-  } finally { await client.close(); await server.close(); }
+  } finally { await client.close(); await server.close(); rmSync(directory,{recursive:true,force:true}); }
 });

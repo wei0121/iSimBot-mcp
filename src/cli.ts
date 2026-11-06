@@ -19,7 +19,7 @@ export async function runCli(args: string[]): Promise<number | undefined> {
     isimbot --help     Show help
     isimbot doctor     Check local dependencies and configuration (read-only)
     isimbot setup      Choose Claude Code or Codex and add MCP configuration
-    isimbot clean      Delete saved screenshots, completed videos and completed timeline images
+    isimbot clean      Delete saved screenshots, completed videos, timeline images and UI snapshots
 
   clean preserves settings, installed runtimes, download/npm caches, timeline JSON,
   active observation images, pending screenshots, custom paths and symbolic links.

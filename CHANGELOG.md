@@ -1,5 +1,14 @@
 # iSimBot-MCP changelog
 
+## Unreleased
+
+- Read bounded simulator unified logs and return actionable app/path/coordinate errors.
+- Resolve Search Bar editors and include responder diagnostics for unsupported input.
+- Save raw accessibility trees as JSON; paginate compact `describe_ui` output.
+- Match uniquely identifiable anonymous element moves in observation and chain changes.
+- Remove generated observation replay candidates; retry display-read timeouts once.
+- Verify optional input/filter/detail parameters in the published MCP tool list.
+
 ## 1.0.11
 
 - Round tap, long-press, double-tap and swipe coordinates at the idb CLI boundary, after screenshot and orientation conversion. The pinned CLI accepts integer coordinates; fractional element centers previously failed. Scroll uses the same corrected swipe path; pinch retains native floating-point precision.

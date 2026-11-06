@@ -328,7 +328,7 @@
   },
   {
     "name": "type_text",
-    "description": "Enter text in the focused field. insert (default) replaces the selection or inserts at the cursor; replace replaces the whole field, and text empty with replace clears it. Chinese/Emoji and replace require launch_app enableTextInput:true or start_observation first (explicit app restart), then focus a standard UIKit/SwiftUI field. No clipboard. Plain apps support ASCII insert via idb only. Native success verifies immediate field text, not later business validation.",
+    "description": "Enter text in the focused field. insert (default) replaces the selection or inserts at the cursor; replace replaces the whole field, and text empty with replace clears it. Chinese/Emoji and replace require launch_app enableTextInput:true or start_observation first (explicit app restart), then focus a standard UIKit/SwiftUI field or UISearchBar search field. Unsupported fields return responder class and target diagnostics; a visible keyboard alone does not prove support. No clipboard. Plain apps support ASCII insert via idb only. Native success verifies immediate field text, not later business validation.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -401,7 +401,7 @@
   },
   {
     "name": "terminate_app",
-    "description": "Terminate a running app",
+    "description": "Request app termination. An uninstalled bundle ID is an error; an already stopped app is a no-op. confirmed:false with terminated:null means the backend accepted termination but did not report a reliable stopped state.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -541,36 +541,70 @@
   },
   {
     "name": "describe_ui",
-    "description": "Get the accessibility tree of the current screen",
+    "description": "Inspect accessibility without an image. Saves the full raw tree to a local JSON file, returns a compact paginated element list by default (50, max 200). detail:number returns count; detail:raw explicitly returns the original JSON tree (max 256 KiB). Use returned snapshotId with offset/limit to read the SAME saved snapshot without querying the simulator again. Snapshots retain the latest 200 and clean removes them. Empty/missing AX elements do not prove the screen is empty. capture returns image and raw elements instead.",
     "inputSchema": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "deviceId": {
+        "snapshotId": {
           "type": "string",
-          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
-        }
-      },
-      "required": []
-    }
-  },
-  {
-    "name": "get_logs",
-    "description": "Get device logs",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "lines": {
+          "description": "Saved snapshotId returned by this tool; omit for a fresh read."
+        },
+        "detail": {
+          "type": "string",
+          "enum": [
+            "number",
+            "list",
+            "raw"
+          ],
+          "default": "list"
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "limit": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 10000,
-          "description": "Number of lines to retrieve (default: 100)"
+          "maximum": 200,
+          "default": 50
         },
         "deviceId": {
           "type": "string",
           "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
         }
-      },
-      "required": []
+      }
+    }
+  },
+  {
+    "name": "get_logs",
+    "description": "Read historical iOS Simulator unified logs (system and app OSLog/NSLog entries retained by the OS), not MCP server logs, Observe events or guaranteed stdout/stderr. Bounded one-shot read, not log streaming. Defaults to the last 30 seconds and at most 100 output lines. Filter by executable process name or PID, not bundle ID. Empty results do not prove no app activity.",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 100
+        },
+        "lastSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 300,
+          "default": 30
+        },
+        "process": {
+          "type": "string",
+          "description": "Executable process name or PID."
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Short deviceId, full udid, or exact unique device name from list_devices. MCP connects automatically. Can be omitted with a valid screenshotId or a single previously used device. Chains bind one device for their entire duration."
+        }
+      }
     }
   },
   {

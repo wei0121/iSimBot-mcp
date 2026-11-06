@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {IDBClient} from '../dist/operation/idb-client.js';
@@ -28,9 +28,11 @@ test('backend passes injection strings literally, sends gestures once, and waits
   const attack=`\\$(touch ${marker}); \u0060touch ${marker}\u0060 " ' & |\n--help`;
   await client.connect(attack);
   await client.typeText(attack);
+  let listCalls=0;client.listApps=async()=>[{bundleId:attack,processState:++listCalls===1?'Running':'Not running'}];
   await client.terminateApp(attack);
   await client.uninstallApp(attack);
   const appPath=join(dir,`a \\$(touch INJECTED) "quoted".app`);
+  mkdirSync(appPath);writeFileSync(join(appPath,'Info.plist'),'test');
   await client.installApp(appPath);
   await client.tap(10,20);await client.swipe(1,2,3,4);
   await client.bootSimulator(attack);

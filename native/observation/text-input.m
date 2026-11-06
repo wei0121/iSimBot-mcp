@@ -18,6 +18,22 @@ static UIView *focusedField(void) {
     }
     return nil;
 }
+// Search bars can expose an internal field editor as first responder. Resolve
+// only its owning standard editor; never choose an unrelated visible field.
+static UIView *standardEditor(UIView *responder) {
+    for (UIView *view = responder; view; view = view.superview) {
+        if ([view isKindOfClass:UITextField.class] || [view isKindOfClass:UITextView.class]) return view;
+        if ([view isKindOfClass:UISearchBar.class]) {
+            UISearchTextField *field = ((UISearchBar *)view).searchTextField;
+            if (field.isFirstResponder || [responder isDescendantOfView:field] || responder == view) return field;
+        }
+    }
+    return responder;
+}
+static BOOL editorFocused(UIView *editor) {
+    UIView *responder = focusedField();
+    return responder && standardEditor(responder) == editor;
+}
 static NSDictionary *target(UIView *view) {
     CGRect rect = view.window ? [view convertRect:view.bounds toCoordinateSpace:view.window.screen.coordinateSpace] : CGRectZero;
     return @{@"elementId": view.accessibilityIdentifier ?: (id)NSNull.null, @"type": NSStringFromClass(view.class),
@@ -84,8 +100,15 @@ static void processCommand(void) {
     if ([command[@"expiresAt"] doubleValue] < NSDate.date.timeIntervalSince1970 * 1000 || ([cancel[@"sessionId"] isEqual:inputSession] && [cancel[@"requestId"] isEqual:request])) {
         respond(request, @{@"success": @NO, @"code": @"TEXT_REQUEST_EXPIRED", @"error": @"Input request expired or was cancelled before application."}); return;
     }
-    UIView *view = focusedField();
-    if (!view || !supported(view)) { respond(request, @{@"success": @NO, @"code": view ? @"UNSUPPORTED_TEXT_FIELD" : @"NO_FOCUSED_TEXT_FIELD", @"error": @"Focus a standard UIKit/SwiftUI text field or text view in the enhanced app. Web/custom editors are unsupported. No input sent."}); return; }
+    UIView *responder = focusedField();
+    UIView *view = standardEditor(responder);
+    if (!view || !supported(view)) {
+        NSMutableArray *classes = [NSMutableArray array];
+        for (UIView *ancestor = responder; ancestor && classes.count < 8; ancestor = ancestor.superview) [classes addObject:NSStringFromClass(ancestor.class)];
+        respond(request, @{@"success": @NO, @"code": view ? @"UNSUPPORTED_TEXT_FIELD" : @"NO_FOCUSED_TEXT_FIELD",
+            @"error": view ? @"Focused responder has no supported UIKit text editor. UISearchBar searchTextField, UITextField and UITextView are supported; Web/custom editors may not be. Capture the screen and focus the actual editable area. No input sent." : @"No first responder found in the enhanced app. Focus the editable area in that app, then retry. A visible keyboard alone does not confirm app focus. No input sent.",
+            @"details": @{@"target": view ? target(view) : (id)NSNull.null, @"responderClass": responder ? NSStringFromClass(responder.class) : (id)NSNull.null, @"ancestorClasses": classes, @"supportsUITextInput": @([responder conformsToProtocol:@protocol(UITextInput)]), @"supportedEditors": @[@"UISearchBar.searchTextField", @"UITextField", @"UITextView"]}}); return;
+    }
     id<UITextInput> field = (id<UITextInput>)view;
     if (field.markedTextRange) { respond(request, @{@"success": @NO, @"code": @"TEXT_COMPOSITION_ACTIVE", @"error": @"An IME composition is active. Commit or cancel it before Agent input; no input sent."}); return; }
     NSString *before = fieldText(view);
@@ -110,7 +133,7 @@ static void processCommand(void) {
         BOOL selectionChanged = [mode isEqual:@"insert"] && (!selection ||
             [field offsetFromPosition:field.beginningOfDocument toPosition:selection.start] != start ||
             [field offsetFromPosition:selection.start toPosition:selection.end] != length);
-        if (!accepted || ![before isEqual:fieldText(view)] || !view.isFirstResponder || selectionChanged) {
+        if (!accepted || ![before isEqual:fieldText(view)] || !editorFocused(view) || selectionChanged) {
             respond(request, @{@"success": @NO, @"code": @"TEXT_INPUT_REJECTED_OR_TRANSFORMED", @"error": @"App validation rejected the edit or changed the field/focus. Inspect actual state before retrying.", @"details": snapshot(view)});
             inputRequest = nil; applying = NO; return;
         }

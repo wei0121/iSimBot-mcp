@@ -1,5 +1,5 @@
 import { textSizes, deviceControlActions, parseDeviceControl, type TextSize } from '../common/device-control.js';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseDisplayGeometry, parseHIDRotation, hidPoint, type DisplayGeometry } from '../image/display-geometry.js';
 import { validateOrientation, parseOrientation, type DeviceOrientation } from '../common/device-orientation.js';
@@ -27,7 +27,7 @@ async function run(file: string, args: (string | number)[], options: { timeout?:
       : failure.killed ? `${file} timed out. The operation may have completed; inspect the simulator before retrying.`
       : (failure.stderr?.trim().slice(-2000) || `${file} failed (${failure.code || 'unknown error'}).`);
     // Do not echo command arguments, which can contain text entered into the app.
-    throw new Error(reason);
+    throw new ToolError(reason, { code: failure.killed ? 'BACKEND_TIMEOUT' : failure.code === 'ENOENT' ? 'BACKEND_NOT_FOUND' : 'BACKEND_FAILED' });
   }
 }
 
@@ -89,14 +89,23 @@ export class IDBClient {
     if (!this.udid || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(this.udid)) return;
     const helper = fileURLToPath(new URL('../native/isimbot-display', import.meta.url));
     if (!existsSync(helper)) throw new ToolError('Display reader missing. Rebuild the local native tools with ./scripts/local-npm run build:observation, or update the installed package. No coordinate guess was made.', { code: 'DISPLAY_GEOMETRY_UNAVAILABLE' });
-    try {
-      const { stdout } = await run('xcrun', ['simctl', 'spawn', this.udid, helper], { timeout: 5000 });
-      const display = parseDisplayGeometry(stdout);
-      if (!includeHID) return display;
-      const hid = await run('xcrun', ['devicectl', 'device', 'info', 'displays', '--device', this.udid, '--json-output', '-'], { timeout: 5000 });
-      return { ...display, hidRotation: parseHIDRotation(hid.stdout) };
-    } catch (error) {
-      throw new ToolError(`Cannot read current interface orientation: ${(error as Error).message}. Capture/touch coordinates were not guessed; inspect the simulator and retry.`, { code: 'DISPLAY_GEOMETRY_UNAVAILABLE' });
+    let stage = 'interface_orientation';
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        stage = 'interface_orientation';
+        const { stdout } = await run('xcrun', ['simctl', 'spawn', this.udid, helper], { timeout: 5000 });
+        const display = parseDisplayGeometry(stdout);
+        if (!includeHID) return display;
+        stage = 'display_rotation';
+        const hid = await run('xcrun', ['devicectl', 'device', 'info', 'displays', '--device', this.udid, '--json-output', '-'], { timeout: 5000 });
+        return { ...display, hidRotation: parseHIDRotation(hid.stdout) };
+      } catch (error) {
+        // Retry read-only timeouts, never malformed data or a gesture/input command.
+        if (attempt === 1 && error instanceof ToolError && error.details.code === 'BACKEND_TIMEOUT') continue;
+        throw new ToolError('Cannot read current display geometry. No coordinates were guessed and no touch was sent. Retry after the simulator is responsive.', {
+          code: 'DISPLAY_GEOMETRY_UNAVAILABLE', stage, attempts: attempt, retryable: error instanceof ToolError && error.details.code === 'BACKEND_TIMEOUT', cause: (error as Error).message,
+        });
+      }
     }
   }
 
@@ -362,7 +371,7 @@ export class IDBClient {
         code: 'ROTATION_NOT_CONFIRMED', requestedOrientation: orientation, actualOrientation: actual ?? null,
       });
     } catch (error) {
-      if (error instanceof ToolError) throw error;
+      if (error instanceof ToolError && error.details.code === 'ROTATION_NOT_CONFIRMED') throw error;
       throw new ToolError(`Rotation could not be confirmed: ${(error as Error).message}. Requires idb client/companion with rotation support (project runtime 1.7.8). Inspect device state before retrying; no GUI or app-injection fallback was used.`, {
         code: 'ROTATION_FAILED', requestedOrientation: orientation, actualOrientation: actual ?? null,
       });
@@ -434,10 +443,17 @@ export class IDBClient {
       throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
+    const path = resolve(appPath);
+    let info;
+    try { info = statSync(path); }
+    catch (error) {
+      throw new ToolError('Cannot access appPath. Supply a readable simulator .app directory on the MCP host.', { code: (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'APP_PATH_NOT_FOUND' : 'APP_PATH_UNREADABLE', appPath: path });
+    }
+    if (!info.isDirectory() || !path.endsWith('.app') || !existsSync(resolve(path, 'Info.plist'))) throw new ToolError('appPath must be a simulator .app bundle directory containing Info.plist.', { code: 'INVALID_APP_BUNDLE', appPath: path });
     try {
-      await run('idb', ['install', '--udid', this.udid, '--', resolve(appPath)], { timeout: 60000 });
-    } catch (error) {
-      throw new Error(`Failed to install app: ${(error as Error).message}`);
+      await run('idb', ['install', '--udid', this.udid, '--', path], { timeout: 60000 });
+    } catch {
+      throw new ToolError('App installation failed. Check that the bundle targets iOS Simulator, matches this simulator architecture, and the device is booted. Run doctor to inspect the environment.', { code: 'APP_INSTALL_FAILED', appPath: path });
     }
   }
 
@@ -457,16 +473,16 @@ export class IDBClient {
     }
   }
 
-  async terminateApp(bundleId: string): Promise<void> {
-    if (!this.udid) {
-      throw new Error('No internal device connection. Retry the operation with deviceId.');
-    }
-
-    try {
-      await run('idb', ['terminate', '--udid', this.udid, '--', bundleId], { timeout: 10000 });
-    } catch (error) {
-      throw new Error(`Failed to terminate app ${bundleId}: ${(error as Error).message}`);
-    }
+  async terminateApp(bundleId: string): Promise<{ terminated: boolean | null; alreadyStopped: boolean; confirmed: boolean }> {
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    const app = (await this.listApps()).find(app => app.bundleId === bundleId);
+    if (!app) throw new ToolError('App is not installed on this device. Use list_apps with installType:all to check the bundle ID.', { code: 'APP_NOT_INSTALLED', bundleId });
+    if (app.processState?.toLowerCase() === 'not running') return { terminated: false, alreadyStopped: true, confirmed: true };
+    await run('idb', ['terminate', '--udid', this.udid, '--', bundleId], { timeout: 10000 });
+    const remaining = (await this.listApps()).find(app => app.bundleId === bundleId);
+    if (remaining?.processState?.toLowerCase() === 'running') throw new ToolError('Termination request completed but the app is still running. Inspect it before retrying.', { code: 'APP_STILL_RUNNING', bundleId });
+    if (remaining && remaining.processState?.toLowerCase() !== 'not running') return { terminated: null, alreadyStopped: false, confirmed: false };
+    return { terminated: true, alreadyStopped: false, confirmed: true };
   }
 
   async uninstallApp(bundleId: string): Promise<void> {
@@ -493,16 +509,14 @@ export class IDBClient {
     }
   }
 
-  async getLogs(lines: number = 100): Promise<string> {
-    if (!this.udid) {
-      throw new Error('No internal device connection. Retry the operation with deviceId.');
-    }
-
+  async getLogs(lines = 100, lastSeconds = 30, process?: string): Promise<string> {
+    if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(this.udid)) throw new ToolError('Historical unified logs are supported for simulators only.', { code: 'LOGS_UNSUPPORTED_DEVICE' });
     try {
-      const { stdout } = await run('idb', ['log', '--udid', this.udid, '--', '--tail', lines], { timeout: 10000 });
-      return stdout;
+      const { stdout } = await run('xcrun', ['simctl', 'spawn', this.udid, 'log', 'show', '--last', `${lastSeconds}s`, '--style', 'compact', '--info', ...(process ? ['--process', process] : [])], { timeout: 15000 });
+      return stdout.trimEnd().split('\n').slice(-lines).join('\n');
     } catch (error) {
-      throw new Error(`Failed to get logs: ${(error as Error).message}`);
+      throw new ToolError('Could not read simulator unified logs. Try a shorter lastSeconds window or filter by process (executable name or PID, not bundle ID).', { code: 'LOGS_READ_FAILED', cause: (error as Error).message });
     }
   }
 
