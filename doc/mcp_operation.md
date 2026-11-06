@@ -45,11 +45,30 @@ chain, image operations may overlap a running gesture.
 | `scroll` | Move a finger from a start point in the specified direction. |
 | `pinch` | Perform a simultaneous two-finger pinch around a center point. |
 | `press_button` | Press Home, Lock, Volume Up or Volume Down. |
-| `type_text` | Enter text into the focused field. |
+| `type_text` | Insert at the cursor/selection (default), or use `mode: "replace"` for the whole focused field. Empty replace clears it. |
 | `set_location` | Set the simulated GPS latitude and longitude. |
 
 Coordinates use logical points. Pass `screenshotId` when using image-pixel
 coordinates to let MCP convert them automatically.
+
+### Native text input
+
+For Chinese, Emoji, replace and clear, explicitly restart the app with
+`launch_app {"bundleId":"com.example.app","enableTextInput":true}` (or start
+an observation), then focus a text field. `type_text` also works in chains:
+
+```json
+{"text":"你好 🙂","mode":"replace"}
+```
+
+Standard UIKit text fields/views and SwiftUI TextField/TextEditor are supported.
+Input uses the app's native editing pipeline, preserving validation and bindings;
+plain apps retain ASCII insert via idb. No clipboard or additional permissions.
+Custom/web editors are unsupported. Active IME composition must finish first.
+Native success checks immediate field text, not later business/network validation.
+Rejected/transformed input returns actual field state; timeouts may have applied,
+so inspect before retrying. Password text is redacted; lengths use UTF-16 units.
+Native input stays enabled after Observe stops, until ordinary relaunch or MCP shutdown.
 
 ## Screen and inspection
 
@@ -165,11 +184,11 @@ automatically; rebuild it after native edits with
 
 The recorder loads into the selected app at launch; no app source changes,
 macOS input monitoring, or Bonjour discovery are used. It observes both human
-and automated touches. Keyboard text actions, system dialogs, other apps and
-multi-touch replay are not supported. Multi-touch/cancelled/incomplete gestures
+and automated touches, plus standard text-field editing notifications. System
+dialogs, other apps, raw keyboard keys and multi-touch replay are not supported. Multi-touch/cancelled/incomplete gestures
 are retained as unsupported records instead of guessed commands.
 
-Capture uses logical size and elements. Before the first touch, only the latest
+Capture uses logical size and elements. Before the first touch or editing event, only the latest
 two captures are retained; afterwards captures continue at the target interval,
 without overlapping reads. Returned timing describes actual capture execution, which may take longer
 than the interval. Stop limits: 200 retained captures,
@@ -219,10 +238,21 @@ Optional source indexes in chain requests are metadata; a new execution assigns
 fresh indexes from zero. Chain results use `index` instead of the old one-based
 `step` field.
 
+Editing events contain `arguments.target` (identifier when available, type and
+logical frame), `text`, `textLength`, `redacted`, `composing` and `source`.
+Synchronous Agent input notifications include its `requestId`; other notifications
+use `app_or_user`, which does not prove human input. Secure fields omit text.
+These instantaneous events have duration 0; focus/blur do not prove typing, and
+there is no reliable "finished typing" event while a user pauses with focus.
+Editing events require manual adaptation before replay; they are not silently
+converted into text commands. Other apps, system keyboards/dialogs and web/custom
+editors remain outside observation scope.
+
 Every session has an `events` array. Internally saved events and
-the protocol-v4 handshake carry `timeline`; public events inherit it from the
+the protocol-v5 handshake (v4 archives remain readable) carry `timeline`; public events inherit it from the
 response root. Events use `tool` values `tap`,
-`double_tap`, `long_press`, `scroll`, `swipe`, `capture` or `unsupported`, with
+`double_tap`, `long_press`, `scroll`, `swipe`, `capture`, `editing_begin`,
+`text_change`, `editing_end` or `unsupported`, with
 `arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
 the app's temporary directory, removed after successful finalization.
 `captureInterval` is independent per session (0.5–10 seconds, default 0.5).
