@@ -1,8 +1,14 @@
+import { textSizes, deviceControlActions, parseDeviceControl, type TextSize } from '../common/device-control.js';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseDisplayGeometry, parseHIDRotation, hidPoint, type DisplayGeometry } from '../image/display-geometry.js';
+import { validateOrientation, parseOrientation, type DeviceOrientation } from '../common/device-orientation.js';
+import { ToolError } from '../mcp/tool-error.js';
 import { appIsRunning, waitUntilRunning } from './readiness.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { resolve } from 'node:path';
-import { clearScreenshotCoordinates } from '../image/screenshot-coordinates.js';
+import { clearScreenshotCoordinates, beginCoordinateChange, endCoordinateChange } from '../image/screenshot-coordinates.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -76,7 +82,23 @@ export function parseSimulatorModels(stdout: string): Map<string, string> {
 
 export class IDBClient {
   private udid: string | null = null;
-  private screenshotScales = new Map<string, { udid: string; scale: number }>();
+  private screenshotScales = new Map<string, { udid: string; scale: number; orientation?: number }>();
+
+  private async displayGeometry(includeHID = false): Promise<(DisplayGeometry & { hidRotation?: number }) | undefined> {
+    // Physical-device transport is unchanged; this reader runs only in a simulator.
+    if (!this.udid || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(this.udid)) return;
+    const helper = fileURLToPath(new URL('../native/isimbot-display', import.meta.url));
+    if (!existsSync(helper)) throw new ToolError('Display reader missing. Rebuild the local native tools with ./scripts/local-npm run build:observation, or update the installed package. No coordinate guess was made.', { code: 'DISPLAY_GEOMETRY_UNAVAILABLE' });
+    try {
+      const { stdout } = await run('xcrun', ['simctl', 'spawn', this.udid, helper], { timeout: 5000 });
+      const display = parseDisplayGeometry(stdout);
+      if (!includeHID) return display;
+      const hid = await run('xcrun', ['devicectl', 'device', 'info', 'displays', '--device', this.udid, '--json-output', '-'], { timeout: 5000 });
+      return { ...display, hidRotation: parseHIDRotation(hid.stdout) };
+    } catch (error) {
+      throw new ToolError(`Cannot read current interface orientation: ${(error as Error).message}. Capture/touch coordinates were not guessed; inspect the simulator and retry.`, { code: 'DISPLAY_GEOMETRY_UNAVAILABLE' });
+    }
+  }
 
   getConnectedDevice() { return this.udid; }
 
@@ -115,8 +137,9 @@ export class IDBClient {
   }
 
   private async sendTap(x: number, y: number, duration: number): Promise<void> {
+    const point = hidPoint(x, y, await this.displayGeometry(true));
     try {
-      await run('idb', ['ui', 'tap', '--udid', this.udid!, '--duration', duration, '--', x, y], { timeout: 10000 });
+      await run('idb', ['ui', 'tap', '--udid', this.udid!, '--duration', duration, '--', ...point], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to tap at (${x}, ${y}): ${(error as Error).message}`);
     }
@@ -129,11 +152,12 @@ export class IDBClient {
 
   async doubleTap(x: number, y: number): Promise<void> {
     if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    const point = hidPoint(x, y, await this.displayGeometry(true));
     try {
       // One HID stream keeps the inter-tap pause on the companion; separate CLI
       // processes add startup/connection latency and can become two single taps.
       await run('idb', ['ui', 'multi-tap', '--udid', this.udid, '--count', 2,
-        '--duration', 0.1, '--pause', 0.1, '--', x, y], { timeout: 10000 });
+        '--duration', 0.1, '--pause', 0.1, '--', ...point], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to double tap at (${x}, ${y}): ${(error as Error).message}`);
     }
@@ -149,8 +173,10 @@ export class IDBClient {
       throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
+    const display = await this.displayGeometry(true);
+    const start = hidPoint(x1, y1, display), end = hidPoint(x2, y2, display);
     try {
-      await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', x1, y1, x2, y2], { timeout: 10000 });
+      await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', ...start, ...end], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to swipe from (${x1}, ${y1}) to (${x2}, ${y2}): ${(error as Error).message}`);
     }
@@ -230,6 +256,117 @@ export class IDBClient {
     }));
   }
 
+  private requireDevice(): string {
+    if (!this.udid) throw new Error('No internal device connection. Supply deviceId.');
+    return safeIdentifier(this.udid);
+  }
+
+  async getDeviceAppearance(timeout = 10000): Promise<'light' | 'dark'> {
+    const { stdout } = await run('xcrun', ['simctl', 'ui', this.requireDevice(), 'appearance'], { timeout });
+    const value = stdout.trim();
+    if (value !== 'light' && value !== 'dark') throw new Error(`Appearance unavailable: ${value.slice(0, 100) || 'empty response'}.`);
+    return value;
+  }
+
+  async getDeviceTextSize(timeout = 10000): Promise<TextSize> {
+    const { stdout } = await run('xcrun', ['simctl', 'ui', this.requireDevice(), 'content_size'], { timeout });
+    const value = stdout.trim() as TextSize;
+    if (!textSizes.includes(value)) throw new Error(`System text size unavailable: ${value.slice(0, 100) || 'empty response'}.`);
+    return value;
+  }
+
+  async getPhysicalOrientation(): Promise<string> {
+    return parseOrientation((await run('idb', ['rotation', '--udid', this.requireDevice(), '--json'])).stdout);
+  }
+
+  async getDeviceSettings() {
+    this.requireDevice();
+    const fields = ['appearance', 'textSize', 'orientation'] as const;
+    const values = await Promise.allSettled([this.getDeviceAppearance(), this.getDeviceTextSize(), this.getPhysicalOrientation()]);
+    const settings: Record<string, string | null> = {}, errors: Record<string, string> = {}, capabilities: Record<string, { readable: boolean }> = {};
+    values.forEach((result, i) => {
+      const field = fields[i]; capabilities[field] = { readable: result.status === 'fulfilled' };
+      settings[field] = result.status === 'fulfilled' ? result.value : null;
+      if (result.status === 'rejected') errors[field] = result.reason instanceof Error ? result.reason.message : String(result.reason);
+    });
+    return { settings, capabilities, actions: deviceControlActions, partial: Object.keys(errors).length > 0, ...(Object.keys(errors).length ? { errors } : {}) };
+  }
+
+  private async setUISetting(option: 'appearance' | 'content_size', requested: string, read: (remainingMs: number) => Promise<string>): Promise<string> {
+    let actual: string | undefined;
+    try {
+      await run('xcrun', ['simctl', 'ui', this.requireDevice(), option, requested]);
+      const deadline = performance.now() + 3000;
+      do {
+        actual = await read(Math.max(1, Math.ceil(deadline - performance.now())));
+        if (actual === requested) return actual;
+        if (performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, Math.min(100, Math.max(0, deadline - performance.now()))));
+      } while (performance.now() < deadline);
+    } catch (error) {
+      throw new ToolError(`Could not confirm system ${option}: ${(error as Error).message}. The request may have applied; use device_control get_settings before retrying.`, {
+        code: 'DEVICE_SETTING_FAILED', setting: option, requested, actual: actual ?? null,
+      });
+    }
+    throw new ToolError(`System ${option} was not confirmed. The setting may have changed; inspect before retrying.`, { code: 'DEVICE_SETTING_NOT_CONFIRMED', requested, actual: actual ?? null });
+  }
+
+  async setDeviceAppearance(appearance: 'light' | 'dark'): Promise<'light' | 'dark'> {
+    parseDeviceControl({ action: 'set_appearance', payload: { appearance } });
+    return await this.setUISetting('appearance', appearance, (ms) => this.getDeviceAppearance(ms)) as 'light' | 'dark';
+  }
+
+  async setDeviceTextSize(size: TextSize): Promise<TextSize> {
+    parseDeviceControl({ action: 'set_text_size', payload: { size } });
+    return await this.setUISetting('content_size', size, (ms) => this.getDeviceTextSize(ms)) as TextSize;
+  }
+
+  async sendNotification(bundleId: string, notification: Record<string, unknown>): Promise<void> {
+    parseDeviceControl({ action: 'send_notification', payload: { bundleId, notification } });
+    await run('idb', ['notification', 'send', '--udid', this.requireDevice(), '--', bundleId, JSON.stringify(notification)]);
+  }
+
+  async listNotifications(bundleId: string) {
+    parseDeviceControl({ action: 'list_notifications', payload: { bundleId } });
+    const { stdout } = await run('idb', ['notification', 'list', '--udid', this.requireDevice(), '--json', '--', bundleId]);
+    const text = stdout.trim();
+    const records = !text ? [] : text.startsWith('[') ? JSON.parse(text) : text.split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+    if (!Array.isArray(records)) throw new Error('Invalid delivered notification list.');
+    return records.map(item => {
+      if (!item || item.bundle_id !== bundleId || typeof item.identifier !== 'string' ||
+        !['title', 'subtitle', 'body', 'thread_identifier'].every(key => typeof item[key] === 'string') ||
+        !(item.date === null || typeof item.date === 'number' && Number.isFinite(item.date))) throw new Error('Invalid delivered notification data.');
+      return { bundleId: item.bundle_id, identifier: item.identifier, title: item.title, subtitle: item.subtitle, body: item.body, threadIdentifier: item.thread_identifier, deliveredAt: item.date };
+    }).sort((a, b) => (b.deliveredAt ?? -Infinity) - (a.deliveredAt ?? -Infinity) || a.identifier.localeCompare(b.identifier));
+  }
+
+  async rotate(orientation: DeviceOrientation): Promise<void> {
+    validateOrientation(orientation);
+    if (!this.udid) throw new Error('No internal device connection. Retry rotate with deviceId.');
+    await this.displayGeometry();
+    beginCoordinateChange(this);
+    let actual: string | undefined;
+    try {
+      await run('idb', ['rotation', '--udid', this.udid, '--', orientation.toUpperCase()], { timeout: 10000 });
+      const deadline = performance.now() + 5000;
+      while (performance.now() < deadline) {
+        const remaining = Math.max(1, Math.ceil(deadline - performance.now()));
+        const { stdout } = await run('idb', ['rotation', '--udid', this.udid, '--json'], { timeout: remaining });
+        actual = parseOrientation(stdout);
+        if (actual === orientation) return;
+        const wait = Math.min(100, Math.max(0, deadline - performance.now()));
+        if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+      }
+      throw new ToolError('Requested physical orientation was not confirmed within 5 seconds. Inspect the simulator before retrying; no automatic rotation retry was performed.', {
+        code: 'ROTATION_NOT_CONFIRMED', requestedOrientation: orientation, actualOrientation: actual ?? null,
+      });
+    } catch (error) {
+      if (error instanceof ToolError) throw error;
+      throw new ToolError(`Rotation could not be confirmed: ${(error as Error).message}. Requires idb client/companion with rotation support (project runtime 1.7.8). Inspect device state before retrying; no GUI or app-injection fallback was used.`, {
+        code: 'ROTATION_FAILED', requestedOrientation: orientation, actualOrientation: actual ?? null,
+      });
+    } finally { endCoordinateChange(this); }
+  }
+
   async screenshot(outputPath?: string): Promise<string> {
     if (!this.udid) {
       throw new Error('No internal device connection. Retry the operation with deviceId.');
@@ -239,17 +376,23 @@ export class IDBClient {
     const path = outputPath || `${process.env.TMPDIR || '/tmp'}/screenshot-${Date.now()}.png`;
 
     try {
+      const display = await this.displayGeometry();
       const { stdout } = await run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 });
       this.screenshotScales.delete(resolve(path));
+      if (display) {
+        const after = await this.displayGeometry();
+        if (JSON.stringify(after) !== JSON.stringify(display)) throw new ToolError('Interface changed during screenshot. Take a fresh capture after rotation settles.', { code: 'DISPLAY_CHANGED_DURING_CAPTURE' });
+      }
       try {
         const metadata = JSON.parse(stdout);
         if (typeof metadata.screen_scale === 'number' && Number.isFinite(metadata.screen_scale) && metadata.screen_scale > 0) {
-          this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale });
+          this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale, ...(display ? { orientation: display.orientation } : {}) });
           if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
         }
       } catch { /* Older idb versions can return no metadata. Never guess scale. */ }
       return path;
     } catch (error) {
+      if (error instanceof ToolError) throw error;
       throw new Error(`Failed to take screenshot: ${(error as Error).message}`);
     }
   }
@@ -367,10 +510,11 @@ export class IDBClient {
         scale < 0.01 || scale > 100 || duration < 0.01 || duration > 5 || radius <= 0 || radius > 10000) {
       throw new Error('Invalid pinch: nonnegative coordinates, scale 0.01–100, duration 0.01–5 seconds, and radius >0–10000 points required.');
     }
+    const point = hidPoint(x, y, await this.displayGeometry(true));
     try {
       // Native HIDPinch: simultaneous contacts, never sequential swipes.
       await run('idb', ['ui', 'pinch', '--udid', this.udid, '--duration', duration,
-        '--radius', radius, '--', x, y, scale], { timeout: 10000 });
+        '--radius', radius, '--', ...point, scale], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Native pinch failed: ${(error as Error).message}. Requires an idb client/companion with native ui pinch support (project runtime: 1.7.8). No swipe fallback or automatic retry was performed.`);
     }

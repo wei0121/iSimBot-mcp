@@ -1,5 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { registerScreenshot } from '../image/screenshot-coordinates.js';
+import { registerScreenshot, screenshotCoordinateEpoch } from '../image/screenshot-coordinates.js';
 import type { IDBClient } from './idb-client.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 import { historyDirectory, settingsSchema, validateSettings, type ScreenshotSettingsStore, type ScreenshotSettings } from '../setting/screenshot-settings.js';
@@ -7,12 +7,13 @@ import { beginScreenshot, pruneScreenshots } from '../storage/screenshot-history
 import { screenshotResult } from '../mcp/screenshot-response.js';
 
 export async function captureScreenshot(client: IDBClient, settings: ScreenshotSettingsStore, outputPath?: string, overrides: Partial<Omit<ScreenshotSettings, 'maxSavedImages'>> = {}) {
+  const coordinateEpoch = screenshotCoordinateEpoch(client);
   const configuration = { ...settings.read(), ...validateSettings(overrides) };
   if (outputPath !== undefined) {
     if (typeof outputPath !== 'string' || !outputPath.trim()) throw new Error('path must be a non-empty string');
     const path = await client.screenshot(outputPath);
     const geometry = client.getScreenshotGeometry?.(path);
-    return registerScreenshot(client, await screenshotResult(path, configuration, geometry, client.getConnectedDevice?.()), geometry);
+    return registerScreenshot(client, await screenshotResult(path, configuration, geometry, client.getConnectedDevice?.()), geometry, coordinateEpoch);
   }
   const dir = historyDirectory(settings);
   const capture = beginScreenshot(dir);
@@ -24,7 +25,7 @@ export async function captureScreenshot(client: IDBClient, settings: ScreenshotS
     const result = await screenshotResult(pending, configuration, geometry, client.getConnectedDevice?.());
     capture.commit();
     pruneScreenshots(dir, settings.read().maxSavedImages);
-    return registerScreenshot(client, result, geometry);
+    return registerScreenshot(client, result, geometry, coordinateEpoch);
   } finally { capture.discard(); }
 }
 

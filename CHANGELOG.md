@@ -1,5 +1,23 @@
 # iSimBot-MCP changelog
 
+## 1.0.10
+
+- Unify observation and operation-chain responses as indexed events; return compact element changes by default, retain full raw snapshots, and add get_images for deferred retrieval of saved captures.
+- Add native Chinese/Emoji input, cursor/selection insert, full-field replace and clear. Enable explicitly with launch_app enableTextInput:true or start_observation; preserve App validation and SwiftUI bindings without clipboard input.
+- Observe standard text-field editing begin/change/end events with element information and Agent request IDs. Redact secure text and retain compatibility with protocol-v4 archives.
+- Add device rotation with physical orientation readback, orientation-aware screenshots and gesture coordinates, and invalidation of old screenshot references.
+- Add device_control with top-level deviceId plus action/payload: query settings, set system text size and appearance, rotate, send/list simulated notifications, and request a fixed location. Support operation chains with full payload preflight and configurable minimum intervals.
+- Include device runtime/model in listings; list user-installed apps by default. Extend clean to completed chain images while preserving catalogs and active media.
+
+### Compatibility notes
+
+- Chain response steps becomes events; requests still use steps. Public events inherit timeline from the response root and use zero-based indexes. Capture events directly expose images, metadata and elements/elementCount; changes includes comparedToIndex.
+- Chain capture images are saved references rather than inline images; retrieve them with get_images. Standalone capture still returns images and full accessibility elements immediately.
+- Enhanced text input explicitly restarts the selected App. Standard UIKit/SwiftUI editors are supported; custom/web editors and active IME composition require separate handling.
+- Simulator display normalization requires the bundled display reader and compatible Xcode display metadata. Physical orientation and system settings do not force an App to change its layout or theme.
+- Notifications simulate device delivery, not the complete server/APNs path. Listing reads currently retained delivered notifications, not history; fixed location success reports request acceptance.
+- Restart the MCP client after upgrading to load the new tools and behavior.
+
 ## 1.0.9
 
 - Change the project license from MIT to Apache-2.0 and credit Weiren Xie in the attribution notice and package metadata.

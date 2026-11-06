@@ -1,3 +1,5 @@
+import { stopClientObservation } from './observation.js';
+import { launchWithTextInput, releaseTextInput } from './text-input.js';
 import type { ToolDefinition } from '../mcp/tool-definition.js';
 
 export const appsTools: ToolDefinition[] = [
@@ -51,10 +53,11 @@ export const appsTools: ToolDefinition[] = [
   {
     definition: {
       name: 'launch_app',
-      description: 'Launch an app by bundle ID and wait for its process to report Running (up to 10 seconds). Does not guarantee UI or network content is ready.',
+      description: 'Launch an app. enableTextInput:true explicitly restarts it with app-local Unicode/replace/clear support for standard UIKit/SwiftUI editors; does not start Observe. No clipboard or extra permissions. Default launch waits for Running (up to 10s); UI readiness is not guaranteed.',
       inputSchema: {
         type: 'object',
         properties: {
+          enableTextInput: { type: 'boolean', default: false, description: 'Restart app with native text input enabled.' },
           bundleId: {
             type: 'string',
             description: 'App bundle ID (e.g., com.example.app)',
@@ -64,6 +67,11 @@ export const appsTools: ToolDefinition[] = [
       },
     },
     async execute(idbClient, args) {
+      if (args.enableTextInput) {
+        await stopClientObservation(idbClient);
+        return launchWithTextInput(idbClient, args.bundleId as string);
+      }
+      releaseTextInput(idbClient);
       await idbClient.launchApp(args.bundleId as string);
       return { success: true, message: `App ${args.bundleId} launched` };
     },
@@ -84,7 +92,9 @@ export const appsTools: ToolDefinition[] = [
       },
     },
     async execute(idbClient, args) {
+      await stopClientObservation(idbClient, args.bundleId as string);
       await idbClient.terminateApp(args.bundleId as string);
+      releaseTextInput(idbClient, args.bundleId as string);
       return { success: true, message: `App ${args.bundleId} terminated` };
     },
   },
@@ -104,7 +114,9 @@ export const appsTools: ToolDefinition[] = [
       },
     },
     async execute(idbClient, args) {
+      await stopClientObservation(idbClient, args.bundleId as string);
       await idbClient.uninstallApp(args.bundleId as string);
+      releaseTextInput(idbClient, args.bundleId as string);
       return { success: true, message: `App ${args.bundleId} uninstalled` };
     },
   },

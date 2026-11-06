@@ -11,6 +11,7 @@ Control existing simulators and apps; iSimBot does not build Xcode projects.
 | `list_devices` | List devices, boot state, `runtime` (for example, `iOS 27.0`) and `model` (for example, `iPhone 18 Pro`). Unknown values are `null`. Entries without a UDID are omitted. |
 | `boot_simulator` | Start a simulator and wait for boot completion. |
 | `shutdown_simulator` | Shut down a simulator. |
+| `rotate` | Set `orientation`: `portrait`, `portrait_upside_down`, `landscape_left`, or `landscape_right`. Confirms physical orientation; apps may lock their interface. |
 
 Device listings include an 8-character `deviceId` and the full `udid`.
 `name` is the editable device name; `model` resolves the actual simulator type by UDID.
@@ -22,6 +23,67 @@ Short IDs remain stable within one MCP session; after restarting, call
 `list_devices` again or use the full UDID. Screenshot `deviceInfo` includes both IDs. Operations on the same
 device run sequentially; different devices can run concurrently. Inside an operation
 chain, image operations may overlap a running gesture.
+
+`rotate {"orientation":"landscape_left","deviceId":"iPhone 18 Pro"}` sets an
+absolute physical orientation (device top pointing left), not a relative turn.
+It works in operation chains and reads back the physical orientation. App rotation
+support and animations are separate: use a fresh capture after rotating. Old
+screenshot references and captures overlapping rotation cannot be used for
+coordinate mapping. Rejected/unsupported rotations return an error, without a
+GUI or app-injection fallback. Chain minimum start interval defaults to 1 second
+for rotate and can be adjusted with `setup.minDelay.rotate`.
+
+Simulator images are losslessly turned to the current foreground interface
+orientation before logical/pixel output, without reducing native resolution.
+Logical touch points use interface coordinates. MCP reads the Simulator display
+rotation through Xcode `devicectl` and converts interface points into the display
+axes expected by idb; idb then performs its native HID conversion. This also
+handles a portrait app in a sideways Simulator window. App-locked
+interfaces use their actual orientation, not a guess from physical orientation.
+A bundled simulator display reader uses a system private API; unavailable or
+changing orientation returns an actionable error rather than guessed coordinates.
+Local native builds include this reader via `build:observation`. Explicit image
+paths keep the backend PNG; returned images follow the interface orientation.
+
+## Device control
+
+`device_control` uses the common top-level `deviceId`, plus `action` and `payload`:
+
+```json
+{"deviceId":"iPhone 18 Pro","action":"set_text_size","payload":{"size":"extra-large"}}
+```
+
+| Action | Payload |
+| --- | --- |
+| `get_settings` | `{}` — reads appearance, textSize and physical orientation independently |
+| `set_text_size` | `{"size":"extra-large"}` — standard or accessibility Dynamic Type category |
+| `rotate` | `{"orientation":"landscape_left"}` — same implementation as `rotate` |
+| `set_appearance` | `{"appearance":"dark"}` — `light` or `dark` |
+| `send_notification` | `{"bundleId":"com.example.app","notification":{"aps":{"alert":"Hello"}}}` |
+| `list_notifications` | `{"bundleId":"com.example.app","offset":0,"limit":100}` — offset/limit optional |
+| `set_location` | `{"latitude":48.137,"longitude":11.575}` — fixed position only |
+
+Payload fields belong only to their selected action. Unknown fields, nested
+`deviceId`, invalid ranges and notification JSON over 4096 UTF-8 bytes fail
+before a chain starts. In chains, put `deviceId` on the chain and use
+`{"tool":"device_control","arguments":{"action":"set_appearance","payload":{"appearance":"dark"}}}`.
+Default minimum start interval is 1 second, configurable with
+`setup.minDelay.device_control`; rotate/location aliases also honor their existing minima.
+
+Setting changes read back system state; apps can override appearance or ignore
+Dynamic Type. Physical rotation does not guarantee interface rotation/readiness.
+`get_settings` returns null/error for unreadable fields and `partial:true`;
+`capabilities` describes current read availability, while `actions` lists the
+MCP action contracts, not a guarantee of runtime support. Location is not read
+back; success means the request was accepted, not an app location callback.
+
+Notification send simulates delivery, without testing the APNs server path.
+Permissions and foreground handling determine presentation. Listing returns
+currently retained delivered notifications, newest first, not complete history
+or a live stream; no app launch is performed. `deliveredAt` uses Unix seconds
+(or null). Pagination defaults/maxes to 100 and may shift as notifications arrive
+or disappear. Notifications are not saved in iSimBot command history.
+Existing `rotate`, `set_location` and `open_url` remain available.
 
 ## Apps
 
@@ -45,11 +107,30 @@ chain, image operations may overlap a running gesture.
 | `scroll` | Move a finger from a start point in the specified direction. |
 | `pinch` | Perform a simultaneous two-finger pinch around a center point. |
 | `press_button` | Press Home, Lock, Volume Up or Volume Down. |
-| `type_text` | Enter text into the focused field. |
+| `type_text` | Insert at the cursor/selection (default), or use `mode: "replace"` for the whole focused field. Empty replace clears it. |
 | `set_location` | Set the simulated GPS latitude and longitude. |
 
 Coordinates use logical points. Pass `screenshotId` when using image-pixel
 coordinates to let MCP convert them automatically.
+
+### Native text input
+
+For Chinese, Emoji, replace and clear, explicitly restart the app with
+`launch_app {"bundleId":"com.example.app","enableTextInput":true}` (or start
+an observation), then focus a text field. `type_text` also works in chains:
+
+```json
+{"text":"你好 🙂","mode":"replace"}
+```
+
+Standard UIKit text fields/views and SwiftUI TextField/TextEditor are supported.
+Input uses the app's native editing pipeline, preserving validation and bindings;
+plain apps retain ASCII insert via idb. No clipboard or additional permissions.
+Custom/web editors are unsupported. Active IME composition must finish first.
+Native success checks immediate field text, not later business/network validation.
+Rejected/transformed input returns actual field state; timeouts may have applied,
+so inspect before retrying. Password text is redacted; lengths use UTF-16 units.
+Native input stays enabled after Observe stops, until ordinary relaunch or MCP shutdown.
 
 ## Screen and inspection
 
@@ -165,11 +246,11 @@ automatically; rebuild it after native edits with
 
 The recorder loads into the selected app at launch; no app source changes,
 macOS input monitoring, or Bonjour discovery are used. It observes both human
-and automated touches. Keyboard text actions, system dialogs, other apps and
-multi-touch replay are not supported. Multi-touch/cancelled/incomplete gestures
+and automated touches, plus standard text-field editing notifications. System
+dialogs, other apps, raw keyboard keys and multi-touch replay are not supported. Multi-touch/cancelled/incomplete gestures
 are retained as unsupported records instead of guessed commands.
 
-Capture uses logical size and elements. Before the first touch, only the latest
+Capture uses logical size and elements. Before the first touch or editing event, only the latest
 two captures are retained; afterwards captures continue at the target interval,
 without overlapping reads. Returned timing describes actual capture execution, which may take longer
 than the interval. Stop limits: 200 retained captures,
@@ -219,10 +300,21 @@ Optional source indexes in chain requests are metadata; a new execution assigns
 fresh indexes from zero. Chain results use `index` instead of the old one-based
 `step` field.
 
+Editing events contain `arguments.target` (identifier when available, type and
+logical frame), `text`, `textLength`, `redacted`, `composing` and `source`.
+Synchronous Agent input notifications include its `requestId`; other notifications
+use `app_or_user`, which does not prove human input. Secure fields omit text.
+These instantaneous events have duration 0; focus/blur do not prove typing, and
+there is no reliable "finished typing" event while a user pauses with focus.
+Editing events require manual adaptation before replay; they are not silently
+converted into text commands. Other apps, system keyboards/dialogs and web/custom
+editors remain outside observation scope.
+
 Every session has an `events` array. Internally saved events and
-the protocol-v4 handshake carry `timeline`; public events inherit it from the
+the protocol-v5 handshake (v4 archives remain readable) carry `timeline`; public events inherit it from the
 response root. Events use `tool` values `tap`,
-`double_tap`, `long_press`, `scroll`, `swipe`, `capture` or `unsupported`, with
+`double_tap`, `long_press`, `scroll`, `swipe`, `capture`, `editing_begin`,
+`text_change`, `editing_end` or `unsupported`, with
 `arguments`, `time`, `delay` and `duration` matching the common operation model. Native touch samples use an atomic JSON snapshot in
 the app's temporary directory, removed after successful finalization.
 `captureInterval` is independent per session (0.5–10 seconds, default 0.5).

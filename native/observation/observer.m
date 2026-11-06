@@ -1,11 +1,11 @@
-#import <UIKit/UIKit.h>
+#import "text-input.h"
 #import <objc/runtime.h>
 #import <fcntl.h>
 #import <unistd.h>
 #import <sys/stat.h>
 
 // Original implementation: observes events inside the explicitly launched app.
-// No host input monitoring, Bonjour, keyboard interception or text collection.
+// No host input monitoring or keyboard interception. Editing notifications are app-local.
 static NSString *leasePath;
 static NSString *timeline;
 static NSString *snapshotPath;
@@ -31,6 +31,11 @@ static void emit(NSDictionary *value) {
         else if (samples.count == 100000) [samples addObject:@{@"type": @"limit", @"timeline": timeline}];
         dirty = YES;
     });
+}
+void ISimBotRecordEditing(NSString *type, NSDictionary *details) {
+    struct stat lease;
+    if (!observing || stat(leasePath.fileSystemRepresentation, &lease) != 0 || time(NULL) - lease.st_mtime > 10) return;
+    emit(@{@"type": type, @"time": @(NSDate.date.timeIntervalSince1970 * 1000), @"details": details});
 }
 @implementation UIApplication (ISimBotObservation)
 - (void)isimbot_observation_sendEvent:(UIEvent *)event {
@@ -74,6 +79,7 @@ static void emit(NSDictionary *value) {
 }
 + (void)load {
     @autoreleasepool {
+        ISimBotStartTextInput();
         NSString *session = NSProcessInfo.processInfo.environment[@"ISIMBOT_OBSERVATION_TIMELINE"];
         if (!session || session.length != 16 || ![session hasPrefix:@"session_"] || [[session substringFromIndex:8] rangeOfCharacterFromSet:[[NSCharacterSet characterSetWithCharactersInString:@"0123456789abcdef"] invertedSet]].location != NSNotFound) return;
         NSString *directory = [NSTemporaryDirectory() stringByAppendingPathComponent:[@"isimbot-observation-" stringByAppendingString:session]];
@@ -83,6 +89,7 @@ static void emit(NSDictionary *value) {
         snapshotPath = [directory stringByAppendingPathComponent:@"samples.json"];
         if ([[NSFileManager defaultManager] fileExistsAtPath:snapshotPath]) return;
         observing = YES;
+        ISimBotStartEditingObservation();
         samples = [NSMutableArray array];
         writer = dispatch_queue_create("dev.isimbot.observation.writer", DISPATCH_QUEUE_SERIAL);
         flushTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, writer);
@@ -93,7 +100,7 @@ static void emit(NSDictionary *value) {
         Method original = class_getInstanceMethod(self, @selector(sendEvent:));
         Method observer = class_getInstanceMethod(self, @selector(isimbot_observation_sendEvent:));
         method_exchangeImplementations(original, observer);
-        emit(@{@"type": @"ready", @"time": @([NSDate date].timeIntervalSince1970 * 1000), @"protocol": @4,
+        emit(@{@"type": @"ready", @"time": @([NSDate date].timeIntervalSince1970 * 1000), @"protocol": @5,
             @"bundleId": NSBundle.mainBundle.bundleIdentifier ?: @"", @"pid": @(getpid())});
     }
 }

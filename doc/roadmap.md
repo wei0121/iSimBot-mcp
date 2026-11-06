@@ -29,7 +29,6 @@ and operation chains separately on each platform.
 
 ## 4. Device control
 
-Switch between portrait and landscape, lock/unlock the screen, and query device
-state. Support these actions in operation chains, with platform limitations made
-explicit. The current `press_button` tool already exposes the lock button;
-explicit lock/unlock state control is planned.
+Device control is implemented in source for system text size, appearance,
+rotation, notification send/list and fixed location, including operation chains. Explicit lock/unlock and more device state
+queries remain planned. The current `press_button` tool exposes the lock button.

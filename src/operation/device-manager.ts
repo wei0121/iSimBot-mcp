@@ -1,3 +1,4 @@
+import { releaseTextInput } from './text-input.js';
 import { setObservationScheduler, stopClientObservation } from './observation.js';
 import { stopClientRecording } from './recording.js';
 import { randomBytes } from 'node:crypto';
@@ -142,6 +143,7 @@ export class DeviceManager {
       await Promise.allSettled([...this.queues.values()]);
       await Promise.allSettled([...this.clients.values()].map(async client => {
         await stopClientObservation(client);
+        releaseTextInput(client);
         const result = await stopClientRecording(client, 'server_shutdown');
         if (result && !result.success) console.error('Recording shutdown failed:', JSON.stringify(result));
       }));
@@ -166,7 +168,7 @@ export class DeviceManager {
       parameters.udid = id;
       return this.enqueue(id, async () => {
         const client = this.clients.get(id) || this.createClient();
-        if (name === 'shutdown_simulator') await stopClientObservation(client);
+        if (name === 'shutdown_simulator') { await stopClientObservation(client); releaseTextInput(client); }
         const result = await tool.execute(client, parameters, settings);
         this.exposeDeviceInfo(result);
         if (name === 'shutdown_simulator') {

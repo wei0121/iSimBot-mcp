@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { translateTouches, operationChain, parseObservationSnapshot, observationEvents } from '../dist/operation/observation-events.js';
+import { translateTouches, translateEditing, operationChain, parseObservationSnapshot, observationEvents } from '../dist/operation/observation-events.js';
 import { tools } from '../dist/mcp/registry.js';
 const event=(time,phase,x=10,y=20,id='one')=>({type:'touch',time,touches:[{id,phase,x,y,touchTime:time/1000,tapCount:1}]});
 
@@ -58,6 +58,8 @@ const fs=require('node:fs');const path=require('node:path');
 const args=process.argv.slice(2);
 if(args[1]==='get_app_container')process.stdout.write(${JSON.stringify(container)});
 if(args[1]==='launch'){
+ const input=process.env.SIMCTL_CHILD_ISIMBOT_TEXT_INPUT_SESSION;
+ if(input)fs.writeFileSync(path.join(${JSON.stringify(container)},'tmp','isimbot-input-'+input,'ready.json'),JSON.stringify({sessionId:input,bundleId:args[3],protocol:1,pid:process.pid}));
  const folder=path.join(${JSON.stringify(container)},'tmp','isimbot-observation-'+process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE);
  const timeline=process.env.SIMCTL_CHILD_ISIMBOT_OBSERVATION_TIMELINE;
  fs.writeFileSync(path.join(folder,'samples.json'),JSON.stringify({timeline,handshake:{type:'ready',timeline,protocol:4,bundleId:args[3],time:Date.now()},samples:[]}));
@@ -73,7 +75,7 @@ if(args[1]==='launch'){
  assert.ok(started.expireAt > Date.now() && started.expireAt <= Date.now()+2000);
  assert.equal(started.captureInterval,0.5);
  await assert.rejects(call('start_observation',{bundleId:'dev.example.test'}),/already active/);
- const source=join(container,'tmp',readdirSync(join(container,'tmp'))[0]);
+ const source=join(container,'tmp',readdirSync(join(container,'tmp')).find(name=>name.startsWith('isimbot-observation-')));
  assert.equal(existsSync(join(source,'active')),true);
  await new Promise(r=>setTimeout(r,2400));
  assert.equal(existsSync(join(source,'active')),false);
