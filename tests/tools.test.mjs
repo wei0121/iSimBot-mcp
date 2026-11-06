@@ -13,7 +13,7 @@ test('stdio entry point publishes the expected tool schemas', async () => {
   try {
     await client.connect(new StdioClientTransport({ command: process.execPath, args: ['dist/index.js'], stderr: 'pipe' }));
     const listed = (await client.listTools()).tools;
-    assert.equal(listed.length, 31);
+    assert.equal(listed.length, 32);
     for (const name of ['start_observation', 'stop_observation', 'get_observation', 'open_url', 'list_apps', 'start_recording', 'stop_recording', 'recording_status']) {
       assert.equal(listed.find(t => t.name === name).inputSchema.properties.deviceId.type, 'string');
     }

@@ -1,5 +1,5 @@
 /** Native screenshot pixels and HID points share a top-left origin in idb. */
-export interface ScreenshotGeometry { udid: string; scale: number }
+export interface ScreenshotGeometry { udid: string; scale: number; orientation?: number }
 
 export function coordinateMapping(originalWidth: number, originalHeight: number,
   returnedWidth: number, returnedHeight: number, geometry?: ScreenshotGeometry) {

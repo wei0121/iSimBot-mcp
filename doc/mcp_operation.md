@@ -11,6 +11,7 @@ Control existing simulators and apps; iSimBot does not build Xcode projects.
 | `list_devices` | List devices, boot state, `runtime` (for example, `iOS 27.0`) and `model` (for example, `iPhone 18 Pro`). Unknown values are `null`. Entries without a UDID are omitted. |
 | `boot_simulator` | Start a simulator and wait for boot completion. |
 | `shutdown_simulator` | Shut down a simulator. |
+| `rotate` | Set `orientation`: `portrait`, `portrait_upside_down`, `landscape_left`, or `landscape_right`. Confirms physical orientation; apps may lock their interface. |
 
 Device listings include an 8-character `deviceId` and the full `udid`.
 `name` is the editable device name; `model` resolves the actual simulator type by UDID.
@@ -22,6 +23,27 @@ Short IDs remain stable within one MCP session; after restarting, call
 `list_devices` again or use the full UDID. Screenshot `deviceInfo` includes both IDs. Operations on the same
 device run sequentially; different devices can run concurrently. Inside an operation
 chain, image operations may overlap a running gesture.
+
+`rotate {"orientation":"landscape_left","deviceId":"iPhone 18 Pro"}` sets an
+absolute physical orientation (device top pointing left), not a relative turn.
+It works in operation chains and reads back the physical orientation. App rotation
+support and animations are separate: use a fresh capture after rotating. Old
+screenshot references and captures overlapping rotation cannot be used for
+coordinate mapping. Rejected/unsupported rotations return an error, without a
+GUI or app-injection fallback. Chain minimum start interval defaults to 1 second
+for rotate and can be adjusted with `setup.minDelay.rotate`.
+
+Simulator images are losslessly turned to the current foreground interface
+orientation before logical/pixel output, without reducing native resolution.
+Logical touch points use interface coordinates. MCP reads the Simulator display
+rotation through Xcode `devicectl` and converts interface points into the display
+axes expected by idb; idb then performs its native HID conversion. This also
+handles a portrait app in a sideways Simulator window. App-locked
+interfaces use their actual orientation, not a guess from physical orientation.
+A bundled simulator display reader uses a system private API; unavailable or
+changing orientation returns an actionable error rather than guessed coordinates.
+Local native builds include this reader via `build:observation`. Explicit image
+paths keep the backend PNG; returned images follow the interface orientation.
 
 ## Apps
 
