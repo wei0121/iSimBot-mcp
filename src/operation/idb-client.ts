@@ -1,8 +1,13 @@
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { parseDisplayGeometry, parseHIDRotation, hidPoint, type DisplayGeometry } from '../image/display-geometry.js';
+import { validateOrientation, parseOrientation, type DeviceOrientation } from '../common/device-orientation.js';
+import { ToolError } from '../mcp/tool-error.js';
 import { appIsRunning, waitUntilRunning } from './readiness.js';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { resolve } from 'node:path';
-import { clearScreenshotCoordinates } from '../image/screenshot-coordinates.js';
+import { clearScreenshotCoordinates, beginCoordinateChange, endCoordinateChange } from '../image/screenshot-coordinates.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -76,7 +81,23 @@ export function parseSimulatorModels(stdout: string): Map<string, string> {
 
 export class IDBClient {
   private udid: string | null = null;
-  private screenshotScales = new Map<string, { udid: string; scale: number }>();
+  private screenshotScales = new Map<string, { udid: string; scale: number; orientation?: number }>();
+
+  private async displayGeometry(includeHID = false): Promise<(DisplayGeometry & { hidRotation?: number }) | undefined> {
+    // Physical-device transport is unchanged; this reader runs only in a simulator.
+    if (!this.udid || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(this.udid)) return;
+    const helper = fileURLToPath(new URL('../native/isimbot-display', import.meta.url));
+    if (!existsSync(helper)) throw new ToolError('Display reader missing. Rebuild the local native tools with ./scripts/local-npm run build:observation, or update the installed package. No coordinate guess was made.', { code: 'DISPLAY_GEOMETRY_UNAVAILABLE' });
+    try {
+      const { stdout } = await run('xcrun', ['simctl', 'spawn', this.udid, helper], { timeout: 5000 });
+      const display = parseDisplayGeometry(stdout);
+      if (!includeHID) return display;
+      const hid = await run('xcrun', ['devicectl', 'device', 'info', 'displays', '--device', this.udid, '--json-output', '-'], { timeout: 5000 });
+      return { ...display, hidRotation: parseHIDRotation(hid.stdout) };
+    } catch (error) {
+      throw new ToolError(`Cannot read current interface orientation: ${(error as Error).message}. Capture/touch coordinates were not guessed; inspect the simulator and retry.`, { code: 'DISPLAY_GEOMETRY_UNAVAILABLE' });
+    }
+  }
 
   getConnectedDevice() { return this.udid; }
 
@@ -115,8 +136,9 @@ export class IDBClient {
   }
 
   private async sendTap(x: number, y: number, duration: number): Promise<void> {
+    const point = hidPoint(x, y, await this.displayGeometry(true));
     try {
-      await run('idb', ['ui', 'tap', '--udid', this.udid!, '--duration', duration, '--', x, y], { timeout: 10000 });
+      await run('idb', ['ui', 'tap', '--udid', this.udid!, '--duration', duration, '--', ...point], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to tap at (${x}, ${y}): ${(error as Error).message}`);
     }
@@ -129,11 +151,12 @@ export class IDBClient {
 
   async doubleTap(x: number, y: number): Promise<void> {
     if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
+    const point = hidPoint(x, y, await this.displayGeometry(true));
     try {
       // One HID stream keeps the inter-tap pause on the companion; separate CLI
       // processes add startup/connection latency and can become two single taps.
       await run('idb', ['ui', 'multi-tap', '--udid', this.udid, '--count', 2,
-        '--duration', 0.1, '--pause', 0.1, '--', x, y], { timeout: 10000 });
+        '--duration', 0.1, '--pause', 0.1, '--', ...point], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to double tap at (${x}, ${y}): ${(error as Error).message}`);
     }
@@ -149,8 +172,10 @@ export class IDBClient {
       throw new Error('No internal device connection. Retry the operation with deviceId.');
     }
 
+    const display = await this.displayGeometry(true);
+    const start = hidPoint(x1, y1, display), end = hidPoint(x2, y2, display);
     try {
-      await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', x1, y1, x2, y2], { timeout: 10000 });
+      await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', ...start, ...end], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Failed to swipe from (${x1}, ${y1}) to (${x2}, ${y2}): ${(error as Error).message}`);
     }
@@ -230,6 +255,34 @@ export class IDBClient {
     }));
   }
 
+  async rotate(orientation: DeviceOrientation): Promise<void> {
+    validateOrientation(orientation);
+    if (!this.udid) throw new Error('No internal device connection. Retry rotate with deviceId.');
+    await this.displayGeometry();
+    beginCoordinateChange(this);
+    let actual: string | undefined;
+    try {
+      await run('idb', ['rotation', '--udid', this.udid, '--', orientation.toUpperCase()], { timeout: 10000 });
+      const deadline = performance.now() + 5000;
+      while (performance.now() < deadline) {
+        const remaining = Math.max(1, Math.ceil(deadline - performance.now()));
+        const { stdout } = await run('idb', ['rotation', '--udid', this.udid, '--json'], { timeout: remaining });
+        actual = parseOrientation(stdout);
+        if (actual === orientation) return;
+        const wait = Math.min(100, Math.max(0, deadline - performance.now()));
+        if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+      }
+      throw new ToolError('Requested physical orientation was not confirmed within 5 seconds. Inspect the simulator before retrying; no automatic rotation retry was performed.', {
+        code: 'ROTATION_NOT_CONFIRMED', requestedOrientation: orientation, actualOrientation: actual ?? null,
+      });
+    } catch (error) {
+      if (error instanceof ToolError) throw error;
+      throw new ToolError(`Rotation could not be confirmed: ${(error as Error).message}. Requires idb client/companion with rotation support (project runtime 1.7.8). Inspect device state before retrying; no GUI or app-injection fallback was used.`, {
+        code: 'ROTATION_FAILED', requestedOrientation: orientation, actualOrientation: actual ?? null,
+      });
+    } finally { endCoordinateChange(this); }
+  }
+
   async screenshot(outputPath?: string): Promise<string> {
     if (!this.udid) {
       throw new Error('No internal device connection. Retry the operation with deviceId.');
@@ -239,17 +292,23 @@ export class IDBClient {
     const path = outputPath || `${process.env.TMPDIR || '/tmp'}/screenshot-${Date.now()}.png`;
 
     try {
+      const display = await this.displayGeometry();
       const { stdout } = await run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 });
       this.screenshotScales.delete(resolve(path));
+      if (display) {
+        const after = await this.displayGeometry();
+        if (JSON.stringify(after) !== JSON.stringify(display)) throw new ToolError('Interface changed during screenshot. Take a fresh capture after rotation settles.', { code: 'DISPLAY_CHANGED_DURING_CAPTURE' });
+      }
       try {
         const metadata = JSON.parse(stdout);
         if (typeof metadata.screen_scale === 'number' && Number.isFinite(metadata.screen_scale) && metadata.screen_scale > 0) {
-          this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale });
+          this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale, ...(display ? { orientation: display.orientation } : {}) });
           if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
         }
       } catch { /* Older idb versions can return no metadata. Never guess scale. */ }
       return path;
     } catch (error) {
+      if (error instanceof ToolError) throw error;
       throw new Error(`Failed to take screenshot: ${(error as Error).message}`);
     }
   }
@@ -367,10 +426,11 @@ export class IDBClient {
         scale < 0.01 || scale > 100 || duration < 0.01 || duration > 5 || radius <= 0 || radius > 10000) {
       throw new Error('Invalid pinch: nonnegative coordinates, scale 0.01–100, duration 0.01–5 seconds, and radius >0–10000 points required.');
     }
+    const point = hidPoint(x, y, await this.displayGeometry(true));
     try {
       // Native HIDPinch: simultaneous contacts, never sequential swipes.
       await run('idb', ['ui', 'pinch', '--udid', this.udid, '--duration', duration,
-        '--radius', radius, '--', x, y, scale], { timeout: 10000 });
+        '--radius', radius, '--', ...point, scale], { timeout: 10000 });
     } catch (error) {
       throw new Error(`Native pinch failed: ${(error as Error).message}. Requires an idb client/companion with native ui pinch support (project runtime: 1.7.8). No swipe fallback or automatic retry was performed.`);
     }

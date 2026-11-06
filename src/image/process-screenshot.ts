@@ -1,3 +1,4 @@
+import { imageRotation } from './display-geometry.js';
 import type { ScreenshotGeometry } from './coordinate-mapping.js';
 import sharp from 'sharp';
 import { ToolError } from '../mcp/tool-error.js';
@@ -7,19 +8,22 @@ export async function processScreenshot(path: string, settings: ScreenshotSettin
   const source = sharp(path);
   const original = await source.metadata();
   if (!original.width || !original.height) throw new Error('Cannot determine screenshot dimensions');
+  const angle = imageRotation(geometry?.orientation);
+  const nativeWidth = angle === 90 || angle === 270 ? original.height : original.width;
+  const nativeHeight = angle === 90 || angle === 270 ? original.width : original.height;
   const scale = geometry?.scale;
   const logicalSize = scale && Number.isFinite(scale) && scale > 0
-    ? { width: original.width / scale, height: original.height / scale } : null;
+    ? { width: nativeWidth / scale, height: nativeHeight / scale } : null;
   if (settings.mode !== 'pixel' && (!logicalSize || !Number.isInteger(logicalSize.width) || !Number.isInteger(logicalSize.height))) {
     throw new ToolError('Cannot produce a 1:1 logical image without reliable integer screen dimensions. Retry with mode pixel, or update idb/companion.', { code: 'LOGICAL_SIZE_UNAVAILABLE', retry: { tool: 'screenshot', arguments: { mode: 'pixel' } } });
   }
-  const width = settings.mode === 'pixel' ? original.width : logicalSize!.width;
-  const height = settings.mode === 'pixel' ? original.height : logicalSize!.height;
+  const width = settings.mode === 'pixel' ? nativeWidth : logicalSize!.width;
+  const height = settings.mode === 'pixel' ? nativeHeight : logicalSize!.height;
   if (width * height > 100_000_000) throw new Error('Image exceeds the 100 megapixel processing limit.');
   let quality = settings.quality;
   let actualBytes = 0;
   for (let attempt = 0; attempt < 8; attempt++) {
-    let pipeline = source.clone().resize({ width, height, fit: 'fill' });
+    let pipeline = source.clone().rotate(angle).resize({ width, height, fit: 'fill' });
     pipeline = settings.format === 'png' ? pipeline.png({ compressionLevel: 9 }) : pipeline.flatten({ background: '#ffffff' }).jpeg({ quality });
     const { data, info } = await pipeline.toBuffer({ resolveWithObject: true });
     actualBytes = data.length;
