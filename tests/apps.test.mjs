@@ -43,11 +43,11 @@ test('new app tools work in chains and invalid URLs fail preflight before earlie
   const chain = tools.find(t => t.definition.name === 'operation_chain');
   const calls = [];
   const fake = { listApps: async () => { calls.push('list'); return [{bundleId:'app.one'}]; }, openUrl: async url => calls.push(url) };
-  const result = await chain.execute(fake, {steps:[{tool:'list_apps',delay:0},{tool:'open_url',arguments:{url:'myapp://page'},delay:0}]}, {});
+  const result = await chain.execute(fake, {steps:[{tool:'list_apps',interval:0},{tool:'open_url',arguments:{url:'myapp://page'},interval:0}]}, {});
   assert.ok(!result.isError);
   assert.deepEqual(calls, ['list','myapp://page']);
   calls.length = 0;
-  await assert.rejects(chain.execute(fake, {steps:[{tool:'list_apps',delay:0},{tool:'open_url',arguments:{url:'missing-scheme'},delay:0}]}, {}));
+  await assert.rejects(chain.execute(fake, {steps:[{tool:'list_apps',interval:0},{tool:'open_url',arguments:{url:'missing-scheme'},interval:0}]}, {}));
   assert.deepEqual(calls, []);
 });
 
@@ -78,6 +78,6 @@ test('list_apps defaults to user installation type and supports all/system in di
  assert.deepEqual((await list.execute(client,{installType:'all'},{})).apps,apps);
  const before=calls;
  await assert.rejects(list.execute(client,{installType:'invalid'},{}));assert.equal(calls,before);
- const chain=await tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'list_apps',arguments:{installType:'system'},delay:0}]},{});
+ const chain=await tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'list_apps',arguments:{installType:'system'},interval:0}]},{});
  assert.deepEqual(chain.structuredContent.events[0].result.apps,[apps[1]]);
 });

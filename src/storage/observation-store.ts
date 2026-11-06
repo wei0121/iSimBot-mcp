@@ -27,8 +27,8 @@ export class ObservationStore {
         if (session.handshake && Number.isFinite(session.handshake.time)) { session.handshake = { ...session.handshake, timestamp: Math.round(session.handshake.time) }; delete session.handshake.time; }
         session.events = session.events.map((event: any) => {
           if (!event) return event;
-          const { time, ...rest } = event;
-          return { ...rest, timestamp: event.timestamp ?? (Number.isFinite(time) && Number.isFinite(session.startedAt) ? Math.round(session.startedAt + time * 1000) : undefined),
+          const { time, delay, ...rest } = event;
+          return { ...rest, interval: event.interval ?? delay, timestamp: event.timestamp ?? (Number.isFinite(time) && Number.isFinite(session.startedAt) ? Math.round(session.startedAt + time * 1000) : undefined),
             ...(Array.isArray(event.points) ? { points: event.points.map(({ time, ...point }: any) => ({ ...point, timestamp: point.timestamp ?? time })) } : {}) };
         });
       }

@@ -4,13 +4,13 @@ import { translateTouches, translateEditing, operationChain, parseObservationSna
 import { tools } from '../dist/mcp/registry.js';
 const event=(timestamp,phase,x=10,y=20,id='one')=>({type:'touch',timestamp,touches:[{id,phase,x,y,touchTimestamp:timestamp,tapCount:1}]});
 
-test('observation preserves actual paths and computes delay between touch starts',()=>{
+test('observation preserves actual paths and computes interval between touch starts',()=>{
  const events=[event(1000,0),event(1100,3),event(1900,0),event(2200,1,80,90),event(2500,3,150,200),event(3000,0),event(4000,3)];
  const gestures=translateTouches(events);
  assert.deepEqual(gestures.map(g=>g.tool),['tap','swipe','long_press']);
  assert.equal(gestures[1].points.length,3);
  const chain=operationChain(gestures);
- assert.deepEqual(chain.steps.map(s=>s.delay),[0,0.9,1.1]);
+ assert.deepEqual(chain.steps.map(s=>s.interval),[0,0.9,1.1]);
  assert.equal(chain.steps[1].arguments.duration,0.6);
  assert.equal(chain.steps[2].arguments.duration,1);
  assert.equal(chain.replayable,true);
@@ -33,7 +33,7 @@ test('JSON snapshots validate handshake and every event timeline; timeline uses 
  assert.deepEqual(events.map(e=>e.timestamp),[900,1000]);
  assert.ok(events.every(e=>e.timeline===timeline));
  const chain=operationChain(translateTouches([event(0,0),event(100,3),event(20000,0),event(20100,3)]));
- assert.equal(chain.steps[1].delay,20);assert.equal(chain.replayable,false);
+ assert.equal(chain.steps[1].interval,20);assert.equal(chain.replayable,false);
 });
 test('observation tools validate input and cannot be embedded in operation_chain',async()=>{
  const start=tools.find(t=>t.definition.name==='start_observation');
@@ -142,7 +142,7 @@ test('double tap requires UIKit count, nearby coordinates and timing, preserving
  const recorded=translateTouches([...double,event(1000,0),event(1100,3)]);
  assert.deepEqual(recorded.map(g=>g.tool),['double_tap','tap']);
  assert.equal(recorded[0].startedAt,0);assert.equal(recorded[0].endedAt,280);
- assert.equal(operationChain(recorded).steps[1].delay,1);
+ assert.equal(operationChain(recorded).steps[1].interval,1);
  const independent=structuredClone(double);independent[3].touches[0].tapCount=1;
  assert.deepEqual(translateTouches(independent).map(g=>g.tool),['tap','tap']);
  const distant=structuredClone(double);distant[2].touches[0].x=100;distant[3].touches[0].x=100;

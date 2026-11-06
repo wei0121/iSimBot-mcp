@@ -20,9 +20,9 @@ test('rotate publishes absolute orientations, supports chains and rejects bad in
  const chain=tools.find(t=>t.definition.name==='operation_chain');
  await assert.rejects(chain.execute(client,{steps:[{tool:'rotate',arguments:{orientation:'portrait'}},{tool:'rotate',arguments:{orientation:'wrong'}}]},{}));
  assert.equal(calls.length,4);
- const steps=prepareSteps([{tool:'rotate',arguments:{orientation:'portrait'},delay:0},{tool:'tap',arguments:{x:1,y:2}}],tools,'chain_11223344');
- assert.equal(steps[1].delay,1);
- assert.throws(()=>prepareSteps([{tool:'rotate',arguments:{orientation:'portrait'},delay:0},{tool:'tap',arguments:{x:1,y:2},delay:0.3}],tools,'chain_11223344'),e=>e.details.code==='MIN_OPERATION_DELAY');
+ const steps=prepareSteps([{tool:'rotate',arguments:{orientation:'portrait'},interval:0},{tool:'tap',arguments:{x:1,y:2}}],tools,'chain_11223344');
+ assert.equal(steps[1].interval,1);
+ assert.throws(()=>prepareSteps([{tool:'rotate',arguments:{orientation:'portrait'},interval:0},{tool:'tap',arguments:{x:1,y:2},interval:0.3}],tools,'chain_11223344'),e=>e.details.code==='MIN_OPERATION_INTERVAL');
  assert.equal(parseOrientation('{"orientation":"LANDSCAPE_RIGHT"}'),'landscape_right');
  assert.throws(()=>parseOrientation('{"orientation":"wrong"}'));
 });

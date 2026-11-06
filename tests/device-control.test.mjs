@@ -20,7 +20,7 @@ test('all seven actions dispatch typed payloads, paginate retained notifications
  const location=await control.execute(client,{action:'set_location',payload:{latitude:1,longitude:2}},{});assert.equal(location.accepted,true);assert.equal(location.confirmed,undefined);
  const notification={aps:{alert:{title:'中文🙂',body:'literal $(cmd)'}},custom:[1,true,null]};assert.equal((await control.execute(client,{action:'send_notification',payload:{bundleId:'app.id',notification}},{})).accepted,true);assert.deepEqual(calls.at(-1),['send','app.id',notification]);
  const page=await control.execute(client,{action:'list_notifications',payload:{bundleId:'app.id',offset:100,limit:2}},{});assert.equal(page.total,102);assert.equal(page.nextOffset,null);assert.deepEqual(page.notifications.map(n=>n.identifier),['100','101']);
- const steps=prepareSteps([{tool:'device_control',arguments:{action:'rotate',payload:{orientation:'portrait'}},delay:0},{tool:'tap',arguments:{x:1,y:2}}],tools,'chain_aabbccdd',{minDelay:{device_control:1,rotate:2}});assert.equal(steps[1].delay,2);
+ const steps=prepareSteps([{tool:'device_control',arguments:{action:'rotate',payload:{orientation:'portrait'}},interval:0},{tool:'tap',arguments:{x:1,y:2}}],tools,'chain_aabbccdd',{minInterval:{device_control:1,rotate:2}});assert.equal(steps[1].interval,2);
 });
 test('system settings and notifications use literal argv, confirm readback, and expose partial query failures',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'isimbot-device-control-')),oldPath=process.env.PATH,log=join(dir,'argv'),mode=join(dir,'mode');writeFileSync(mode,'ok');

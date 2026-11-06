@@ -133,14 +133,14 @@ test('per-call screenshot overrides, actionable errors and chain validation pres
     const retried = await client.callTool({ name: error.retry.tool, arguments: error.retry.arguments });
     assert.ok(!retried.isError);
     const chain = await client.callTool({ name: 'operation_chain', arguments: { steps: [
-      { tool: 'screenshot', arguments: { mode: 'logical', quality: 60, maxBytes: 2000000 }, delay: 0 },
-      { tool: 'screenshot', arguments: { mode: 'pixel', maxBytes: 10000 }, delay: 0 },
+      { tool: 'screenshot', arguments: { mode: 'logical', quality: 60, maxBytes: 2000000 }, interval: 0 },
+      { tool: 'screenshot', arguments: { mode: 'pixel', maxBytes: 10000 }, interval: 0 },
     ] } });
     assert.equal(JSON.parse(chain.content[0].text).events[1].code, 'SCREENSHOT_TOO_LARGE');
     const before = captures;
     const invalid = await client.callTool({ name: 'operation_chain', arguments: { steps: [
-      { tool: 'screenshot', delay: 0 },
-      { tool: 'screenshot', arguments: { maxBytes: 9000000 }, delay: 0 },
+      { tool: 'screenshot', interval: 0 },
+      { tool: 'screenshot', arguments: { maxBytes: 9000000 }, interval: 0 },
     ] } });
     assert.equal(invalid.isError, true);
     assert.equal(captures, before);
@@ -180,7 +180,7 @@ test('MCP chain preserves both image metadata in structuredContent without dupli
   const [a,b]=InMemoryTransport.createLinkedPair();
   try {
     await server.connect(a);await client.connect(b);
-    const response=await client.callTool({name:'operation_chain',arguments:{steps:[{tool:'screenshot',arguments:{mode:'both'},delay:0}]}});
+    const response=await client.callTool({name:'operation_chain',arguments:{steps:[{tool:'screenshot',arguments:{mode:'both'},interval:0}]}});
     assert.ok(!response.isError);
     const images=response.structuredContent.events[0].result.images;
     assert.deepEqual(images.map(i=>i.mode),['logical','pixel']);

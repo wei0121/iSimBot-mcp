@@ -30,11 +30,11 @@ test('pinch converts screenshot center and radius, preserves scale/duration, and
   assert.deepEqual(calls.pop(),[201,437,0.5,1,70]);
   await pinch.execute(client,{screenshotId,x:603,y:1311},{});
   const defaults=calls.pop();assert.deepEqual(defaults.slice(0,4),[201,437,2,0.5]);assert.ok(Math.abs(defaults[4]-100/3)<1e-10);
-  const result=await tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'pinch',arguments:{x:201,y:437,scale:0.5},delay:0}]},{});
+  const result=await tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'pinch',arguments:{x:201,y:437,scale:0.5},interval:0}]},{});
   assert.equal(result.structuredContent.success,true);assert.deepEqual(calls.pop(),[201,437,0.5,0.5,100]);
 });
 test('invalid pinch arguments fail before any action, including later chain steps',async()=>{
   const client={pinch:async()=>assert.fail('must not execute'),tap:async()=>assert.fail('must not execute')};
   for(const args of [{scale:0},{scale:Infinity},{scale:'2;echo bad'},{radius:0},{duration:-1},{x:-1}])await assert.rejects(pinch.execute(client,{x:200,y:400,...args},{}));
-  await assert.rejects(tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'tap',arguments:{x:1,y:2},delay:0},{tool:'pinch',arguments:{x:1,y:2,radius:0},delay:0}]},{}));
+  await assert.rejects(tools.find(t=>t.definition.name==='operation_chain').execute(client,{steps:[{tool:'tap',arguments:{x:1,y:2},interval:0},{tool:'pinch',arguments:{x:1,y:2,radius:0},interval:0}]},{}));
 });
