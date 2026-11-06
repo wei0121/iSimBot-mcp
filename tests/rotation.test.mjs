@@ -130,3 +130,17 @@ test('HID mapping distinguishes app interface and Simulator window rotation, inc
  assert.equal(parseHIDRotation(JSON.stringify({result:{displays:[{currentOrientation:'rot90',primary:true}]}})),90);
  assert.throws(()=>parseHIDRotation('{"result":{"displays":[]}}'));
 });
+
+test('integer-only idb HID commands round after coordinate transformation; pinch preserves floats',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'isimbot-hid-fractions-')),oldPath=process.env.PATH,log=join(dir,'log');
+ writeFileSync(join(dir,'idb'),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(log)},JSON.stringify(process.argv.slice(2)));\n`,{mode:0o755});process.env.PATH=`${dir}:${oldPath}`;
+ t.after(()=>{process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
+ const client=new IDBClient();client.udid='device';client.displayGeometry=async()=>({orientation:3,width:402,height:874,hidRotation:0});
+ const args=()=>JSON.parse(readFileSync(log,'utf8'));
+ for(const action of[()=>client.tap(100.25,50.75),()=>client.doubleTap(100.25,50.75),()=>client.longPress(100.25,50.75,1)]){
+  await action();assert.deepEqual(args().slice(-2),['351','100']);
+ }
+ await client.swipe(100.25,50.75,200.75,100.25);assert.deepEqual(args().slice(-4),['351','100','302','201']);
+ await client.scroll(100.25,100.75,'up',50.5);assert.deepEqual(args().slice(-4),['301','100','352','100']);
+ await client.pinch(100.25,50.75,2,0.5,20.5);assert.deepEqual(args().slice(-3),['351.25','100.25','2']);
+});

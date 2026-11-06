@@ -136,8 +136,10 @@ export class IDBClient {
     }
   }
 
+  // idb tap/multi-tap/swipe parse coordinates as integers. Round only after
+  // screenshot scaling and interface-to-display conversion, at the CLI boundary.
   private async sendTap(x: number, y: number, duration: number): Promise<void> {
-    const point = hidPoint(x, y, await this.displayGeometry(true));
+    const point = hidPoint(x, y, await this.displayGeometry(true)).map(Math.round);
     try {
       await run('idb', ['ui', 'tap', '--udid', this.udid!, '--duration', duration, '--', ...point], { timeout: 10000 });
     } catch (error) {
@@ -152,7 +154,7 @@ export class IDBClient {
 
   async doubleTap(x: number, y: number): Promise<void> {
     if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
-    const point = hidPoint(x, y, await this.displayGeometry(true));
+    const point = hidPoint(x, y, await this.displayGeometry(true)).map(Math.round);
     try {
       // One HID stream keeps the inter-tap pause on the companion; separate CLI
       // processes add startup/connection latency and can become two single taps.
@@ -174,7 +176,7 @@ export class IDBClient {
     }
 
     const display = await this.displayGeometry(true);
-    const start = hidPoint(x1, y1, display), end = hidPoint(x2, y2, display);
+    const start = hidPoint(x1, y1, display).map(Math.round), end = hidPoint(x2, y2, display).map(Math.round);
     try {
       await run('idb', ['ui', 'swipe', '--udid', this.udid, '--duration', duration, '--', ...start, ...end], { timeout: 10000 });
     } catch (error) {
