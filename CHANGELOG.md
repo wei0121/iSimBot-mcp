@@ -1,5 +1,9 @@
 # iSimBot-MCP changelog
 
+## Unreleased
+
+- Round tap, long-press, double-tap and swipe coordinates at the idb CLI boundary, after screenshot and orientation conversion. The pinned CLI accepts integer coordinates; fractional element centers previously failed. Scroll uses the same corrected swipe path; pinch retains native floating-point precision.
+
 ## 1.0.10
 
 - Unify observation and operation-chain responses as indexed events; return compact element changes by default, retain full raw snapshots, and add get_images for deferred retrieval of saved captures.
