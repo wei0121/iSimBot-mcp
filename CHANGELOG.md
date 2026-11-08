@@ -1,5 +1,10 @@
 # iSimBot-MCP changelog
 
+## Unreleased
+
+- Rename `delay` to `interval` throughout operation-chain requests, timeline results, settings and server instructions; retain start-to-start seconds and unchanged `duration` semantics.
+- Rename minimum timing settings to `minInterval`; read legacy saved settings and observation intervals without rewriting files on read.
+
 ## 1.0.14
 
 - Publish five concise cross-tool usage instructions in the MCP initialize response, available before tool discovery.

@@ -13,7 +13,7 @@ export const serverInstructions = [
   '- Select the device explicitly. Use full UDIDs in long-running scripts; short deviceIds change after MCP restart.',
   '- Prefer capture element centers for coordinates (logical points, without screenshotId). For image coordinates, pass screenshotId.',
   '- Gesture success does not prove the intended UI effect; verify key steps with capture or screenshot.',
-  '- Prefer operation_chain with timed captures over external sleeps. delay is seconds from the previous step START.',
+  '- Prefer operation_chain with timed captures over external sleeps. interval is seconds from the previous step START.',
   '- Keep output small: prefer logical images, changes/number element detail, pagination, and get_images for saved captures.',
 ].join('\n');
 

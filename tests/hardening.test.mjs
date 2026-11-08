@@ -37,7 +37,7 @@ test('direct and chain calls reject invalid arguments before side effects', asyn
   ]) await assert.rejects(tools.find(t => t.definition.name === name).execute(client, args, {}));
   const chain = tools.find(t => t.definition.name === 'operation_chain');
   await assert.rejects(chain.execute(client, { steps: [
-    { tool: 'tap', arguments: { x: 1, y: 2 }, delay: 0 },
+    { tool: 'tap', arguments: { x: 1, y: 2 }, interval: 0 },
     { tool: 'swipe', arguments: { x1: 1, y1: 2, x2: 3, y2: 4, duration: -1 } },
   ] }, {}));
   assert.deepEqual(calls, []);

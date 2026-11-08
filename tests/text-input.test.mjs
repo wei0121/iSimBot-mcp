@@ -30,7 +30,7 @@ test('Observe editing events validate, preserve target/request/composition, shar
  assert.deepEqual(translateTouches(parsed.samples),[]);
  const events=observationEvents(translateEditing(parsed.samples),[],timeline,900);
  assert.deepEqual(events.map(e=>e.tool),['editing_begin','text_change','editing_end']);
- assert.deepEqual(events.map(e=>e.delay),[0.1,0.1,0.1]);
+ assert.deepEqual(events.map(e=>e.interval),[0.1,0.1,0.1]);
  assert.ok(events.every(e=>e.duration===0));assert.equal(events[1].arguments.requestId,'req');
  assert.equal(events[1].arguments.target.elementId,'title');
  assert.equal(operationChain(events).replayable,false);

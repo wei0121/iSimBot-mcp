@@ -72,7 +72,7 @@ test('chain failure saves its recording, but never stops a pre-existing recordin
   const client={getConnectedDevice:()=> 'device-A'};const settings={path:join(dir,'settings.json')};
   const fail={definition:{name:'fail',inputSchema:{type:'object',properties:{}}},execute:async()=>{throw Error('intentional');}};
   const chain=createOperationChain([...recordingTools,fail]);
-  const result=await chain.execute(client,{steps:[{tool:'start_recording',delay:0},{tool:'fail',delay:0},{tool:'stop_recording',delay:0}]},settings);
+  const result=await chain.execute(client,{steps:[{tool:'start_recording',interval:0},{tool:'fail',interval:0},{tool:'stop_recording',interval:0}]},settings);
   assert.equal(result.isError,true);assert.equal(result.structuredContent.recordingCleanup.status,'saved');
   assert.equal(result.structuredContent.recordingCleanup.stopReason,'chain_failed');
   const start=recordingTools.find(t=>t.definition.name==='start_recording');
@@ -80,7 +80,7 @@ test('chain failure saves its recording, but never stops a pre-existing recordin
   const status=recordingTools.find(t=>t.definition.name==='recording_status');
   await start.execute(client,{},settings);
   await assert.rejects(start.execute(client,{},settings),/already/);
-  await chain.execute(client,{steps:[{tool:'fail',delay:0}]},settings);
+  await chain.execute(client,{steps:[{tool:'fail',interval:0}]},settings);
   assert.equal((await status.execute(client)).status,'recording');
   await stop.execute(client);
 });
@@ -102,7 +102,7 @@ test('recording does not hold device queues; devices record independently and cl
   let operated=false;
   await manager.execute({definition:{name:'test_operation',inputSchema:{type:'object',properties:{}}},execute:async()=>{operated=true;}},{deviceId:'A'},settings);
   assert.equal(operated,true);
-  const chain = await manager.execute(createOperationChain(recordingTools), {deviceId:'A',steps:[{tool:'recording_status',delay:0}]},settings);
+  const chain = await manager.execute(createOperationChain(recordingTools), {deviceId:'A',steps:[{tool:'recording_status',interval:0}]},settings);
   assert.deepEqual(JSON.parse(chain.content[0].text).events[0].result,chain.structuredContent.events[0].result);
   await manager.close();
   for (const client of clients) {
@@ -165,8 +165,8 @@ test('chain accepts a custom recording path and still records to a temporary fil
     await firstFrame;await new Promise(resolve=>setImmediate(resolve));clock+=ms;
   },()=>clock);
   const result=await chain.execute(client,{steps:[
-    {tool:'start_recording',arguments:{path},delay:0},
-    {tool:'stop_recording',delay:0.5},
+    {tool:'start_recording',arguments:{path},interval:0},
+    {tool:'stop_recording',interval:0.5},
   ]},{path:join(dir,'config','settings.json')});
   assert.equal(result.structuredContent.success,true);
   assert.equal(result.structuredContent.events[1].result.path,path);

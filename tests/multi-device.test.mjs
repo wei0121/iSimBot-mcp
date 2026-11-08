@@ -71,7 +71,7 @@ test('entire chain owns one queue; other devices continue; lifecycle and cross-d
   const {run,connect,clients,events}=fixture();await connect();
   const entered=deferred(),release=deferred();t.after(()=>release.resolve());
   clients.get('A').tap=async x=>{events.push(['A',x]);if(x===1){entered.resolve();await release.promise;}};
-  const chain=run('operation_chain',{deviceId:'A',steps:[1,2].map(x=>({tool:'tap',arguments:{x,y:0},delay:x===1?0:0.4}))});
+  const chain=run('operation_chain',{deviceId:'A',steps:[1,2].map(x=>({tool:'tap',arguments:{x,y:0},interval:x===1?0:0.4}))});
   await entered.promise;
   const other=run('tap',{deviceId:'A',x:3,y:0});await run('tap',{deviceId:'B',x:4,y:0});
   assert.deepEqual(events,[['A',1],['B',4,0]]);
@@ -79,9 +79,9 @@ test('entire chain owns one queue; other devices continue; lifecycle and cross-d
   assert.deepEqual(events.filter(e=>e[0]==='A'),[['A',1],['A',2],['A',3]]);
   events.length=0;
   for(const step of [{tool:'connect_device',arguments:{udid:'B'}},{tool:'shutdown_simulator',arguments:{udid:'B'}},{tool:'tap',arguments:{deviceId:'B',x:0,y:0}}]){
-    await assert.rejects(run('operation_chain',{deviceId:'A',steps:[{tool:'tap',arguments:{x:9,y:0},delay:0},{...step,delay:0}]}));
+    await assert.rejects(run('operation_chain',{deviceId:'A',steps:[{tool:'tap',arguments:{x:9,y:0},interval:0},{...step,interval:0}]}));
   }
-  await assert.rejects(run('operation_chain',{deviceId:'A',steps:[{tool:'tap',arguments:{x:9,y:0},delay:0},{tool:'tap',arguments:{screenshotId:reference(clients.get('B')),x:1,y:1},delay:0}]}),e=>e.details.code==='DEVICE_MISMATCH');
+  await assert.rejects(run('operation_chain',{deviceId:'A',steps:[{tool:'tap',arguments:{x:9,y:0},interval:0},{tool:'tap',arguments:{screenshotId:reference(clients.get('B')),x:1,y:1},interval:0}]}),e=>e.details.code==='DEVICE_MISMATCH');
   assert.deepEqual(events,[]);
 });
 
@@ -211,7 +211,7 @@ test('short IDs are returned in both and chain screenshot metadata alongside the
   const dir=mkdtempSync(join(tmpdir(),'isimbot-short-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
   const settings=new ScreenshotSettingsStore(join(dir,'settings.json'));
   const id=(await run('list_devices')).find(d=>d.udid==='A').deviceId;
-  const result=await manager.execute(tools.find(t=>t.definition.name==='operation_chain'),{deviceId:id,steps:[{tool:'screenshot',arguments:{mode:'both'},delay:0}]},settings);
+  const result=await manager.execute(tools.find(t=>t.definition.name==='operation_chain'),{deviceId:id,steps:[{tool:'screenshot',arguments:{mode:'both'},interval:0}]},settings);
   for(const entry of result.structuredContent.events[0].result.images){
     assert.equal(entry.deviceInfo.deviceId,id);assert.equal(entry.deviceInfo.udid,'A');
     await run('tap',{deviceId:id,screenshotId:entry.screenshotId,x:2,y:2});
@@ -230,7 +230,7 @@ test('device names resolve exactly, reject duplicates even across boot states, a
   await assert.rejects(run('tap',{deviceId:'iphone test',x:1,y:1}),e=>e.details.code==='DEVICE_NOT_FOUND');
   devices[1]={...devices[1],name:'iPhone Test'};events.length=0;
   for(const name of ['tap','boot_simulator','shutdown_simulator','operation_chain']){
-    const args=name==='tap'?{x:1,y:1}:name==='operation_chain'?{steps:[{tool:'tap',arguments:{x:1,y:1},delay:0}]}:{};
+    const args=name==='tap'?{x:1,y:1}:name==='operation_chain'?{steps:[{tool:'tap',arguments:{x:1,y:1},interval:0}]}:{};
     await assert.rejects(run(name,{...args,deviceId:'iPhone Test'}),e=>e.details.code==='AMBIGUOUS_DEVICE_NAME'&&e.details.devices.length===2&&e.details.devices.every(d=>d.deviceId&&d.udid));
   }
   assert.deepEqual(events,[]);assert.deepEqual(connects,['A']);

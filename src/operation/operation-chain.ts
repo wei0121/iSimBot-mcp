@@ -30,7 +30,7 @@ export function createOperationChain(
   return {
     definition: {
       name: 'operation_chain',
-      description: 'Run steps on one device. delay is the interval from the PREVIOUS step START to this step START, default at least 0.3 seconds (increased when omitted to satisfy per-tool minDelay); first delay is from chain start. timestamp is a Unix epoch millisecond integer for command start, not the actual touch instant; delay/duration remain seconds; duration is this operation actual elapsed seconds and never added to delay. capture/screenshot may overlap a running gesture. Explicit delays below per-tool minima fail before any operation. Timed gestures require requested duration plus 0.2 seconds before the next non-image operation. Other overlapping commands fail with OPERATION_TIME_CONFLICT rather than silently waiting. Stops launching steps after failure, then waits for started operations to settle; effects are not rolled back. Up to 100 steps, 30 screenshot/capture calls, delay 0–10 seconds each and 120 seconds total; saved capture images are capped at 100 MiB and inline screenshot responses at 16 MB Base64. Top-level elementDetail defaults to changes for capture results; number returns counts and list returns compact elements. Changes compare successive capture steps in this chain by index, never completion order, and return comparedToIndex. First capture marks elements appeared; unavailable snapshots report comparison unavailable. Capture images are saved locally and returned as references; call get_images with timeline and event indexes to view them. Standalone capture is unchanged. Screenshot steps still return images directly. Returns index/tool/arguments/delay/timestamp/duration records in events, with timeline only at the top level. index is the zero-based request step position, independent of completion order; timestamp is not an identifier. Parent IDs use chain_xxxxxxxx. Device lifecycle and observation tools are excluded. A recording started by a failed chain is stopped; existing recordings are preserved.',
+      description: 'Run steps on one device. interval is the interval from the PREVIOUS step START to this step START, default at least 0.3 seconds (increased when omitted to satisfy per-tool minInterval); first interval is from chain start. timestamp is a Unix epoch millisecond integer for command start, not the actual touch instant; interval/duration remain seconds; duration is this operation actual elapsed seconds and never added to interval. capture/screenshot may overlap a running gesture. Explicit intervals below per-tool minima fail before any operation. Timed gestures require requested duration plus 0.2 seconds before the next non-image operation. Other overlapping commands fail with OPERATION_TIME_CONFLICT rather than silently waiting. Stops launching steps after failure, then waits for started operations to settle; effects are not rolled back. Up to 100 steps, 30 screenshot/capture calls, interval 0–10 seconds each and 120 seconds total; saved capture images are capped at 100 MiB and inline screenshot responses at 16 MB Base64. Top-level elementDetail defaults to changes for capture results; number returns counts and list returns compact elements. Changes compare successive capture steps in this chain by index, never completion order, and return comparedToIndex. First capture marks elements appeared; unavailable snapshots report comparison unavailable. Capture images are saved locally and returned as references; call get_images with timeline and event indexes to view them. Standalone capture is unchanged. Screenshot steps still return images directly. Returns index/tool/arguments/interval/timestamp/duration records in events, with timeline only at the top level. index is the zero-based request step position, independent of completion order; timestamp is not an identifier. Parent IDs use chain_xxxxxxxx. Device lifecycle and observation tools are excluded. A recording started by a failed chain is stopped; existing recordings are preserved.',
       inputSchema: { type: 'object', additionalProperties: false, required: ['steps'], properties: {
         elementDetail: { ...elementDetailSchema, description: 'Element presentation for capture steps, shared with get_observation. changes compares full captures in step-index order within this chain; screenshot steps do not reset the baseline.' },
         steps: { type: 'array', minItems: 1, maxItems: 100, items: {
@@ -39,9 +39,9 @@ export function createOperationChain(
             index: { type: 'integer', minimum: 0, description: 'Optional source event index (metadata only). Execution assigns zero-based indexes in request order.' },
             tool: { type: 'string', enum: [...registry.keys()] },
             arguments: { type: 'object', description: 'Tool arguments. arguments.duration, when supported, is the requested gesture duration.' },
-            delay: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Seconds from previous operation START; first step from chain start. Does not include duration. Explicit values below the previous non-image tool minimum fail preflight. Images do not reset the previous-command interval.' },
-            timestamp: { type: 'integer', minimum: 0, description: 'Optional source Unix millisecond timestamp, metadata only. Scheduling uses delay; returned timestamp is the command start on the epoch clock, not actual touch injection.' },
-            duration: { type: 'number', minimum: 0, description: 'Optional source duration (metadata only). Returned duration is this operation actual elapsed seconds; it does not affect delay.' },
+            interval: { type: 'number', minimum: 0, maximum: 10, default: 0.3, description: 'Seconds from previous operation START; first step from chain start. Does not include duration. Explicit values below the previous non-image tool minimum fail preflight. Images do not reset the previous-command interval.' },
+            timestamp: { type: 'integer', minimum: 0, description: 'Optional source Unix millisecond timestamp, metadata only. Scheduling uses interval; returned timestamp is the command start on the epoch clock, not actual touch injection.' },
+            duration: { type: 'number', minimum: 0, description: 'Optional source duration (metadata only). Returned duration is this operation actual elapsed seconds; it does not affect interval.' },
           },
         } },
       } },
@@ -68,7 +68,7 @@ export function createOperationChain(
       for (const [index, step] of steps.entries()) {
         if (failed) break;
         // Start-to-start scheduling: elapsed work is not added to the interval.
-        const remaining = Math.max(0, previousStart + step.delay * 1000 - now());
+        const remaining = Math.max(0, previousStart + step.interval * 1000 - now());
         if (remaining > 0) {
           const controller = new AbortController();
           try { await Promise.race([sleep(remaining, controller.signal), failure]); }
@@ -77,12 +77,12 @@ export function createOperationChain(
         if (failed) break;
         const startedAt = now();
         const timestamp = Math.round(epochOrigin + startedAt - origin);
-        const record = { ...step, timestamp, delay: (timestamp - previousTimestamp) / 1000, duration: 0 };
+        const record = { ...step, timestamp, interval: (timestamp - previousTimestamp) / 1000, duration: 0 };
         previousTimestamp = timestamp;
         previousStart = startedAt;
         const image = imageTools.has(step.tool);
         if (!image && busy) {
-          outcomes[index] = { ...record, success: false, code: 'OPERATION_TIME_CONFLICT', error: 'Previous non-image operation is still running at this requested start timestamp. Increase delay or move the operation; no automatic postponement was performed.' };
+          outcomes[index] = { ...record, success: false, code: 'OPERATION_TIME_CONFLICT', error: 'Previous non-image operation is still running at this requested start timestamp. Increase interval or move the operation; no automatic postponement was performed.' };
           failed = true; signalFailure(); break;
         }
         if (!image) busy = true;
@@ -131,7 +131,7 @@ export function createOperationChain(
           }
         })();
         pending.push(task);
-        // Flush already completed commands (including delay:0), without awaiting
+        // Flush already completed commands (including interval:0), without awaiting
         // a still-running gesture. Images can begin while that gesture continues.
         await new Promise<void>(resolve => setImmediate(resolve));
       }

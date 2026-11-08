@@ -24,7 +24,7 @@ function fixture(snapshots) {
  const chain=createOperationChain([capture,tap,screenshot],async ms=>{clock+=ms;},()=>clock);
  return {chain,screenshotMetadata,calls:()=>count};
 }
-const steps=['capture','tap','screenshot','capture','capture'].map(tool=>({tool,delay:0}));
+const steps=['capture','tap','screenshot','capture','capture'].map(tool=>({tool,interval:0}));
 
 test('chain defaults to shared changes against raw capture snapshots, ignoring intervening tools',async()=>{
  const raw=JSON.stringify([before,after]);const f=fixture([before,after,after]);
@@ -44,7 +44,7 @@ test('chain defaults to shared changes against raw capture snapshots, ignoring i
 
 test('chain supports number/list and rejects invalid presentation options before actions',async()=>{
  for(const detail of ['number','list']) {
-  const f=fixture([before,after]);const result=await f.chain.execute({}, {elementDetail:detail,steps:[{tool:'capture',delay:0},{tool:'capture',delay:0}]},{});
+  const f=fixture([before,after]);const result=await f.chain.execute({}, {elementDetail:detail,steps:[{tool:'capture',interval:0},{tool:'capture',interval:0}]},{});
   assert.equal(result.structuredContent.elementDetail,detail);
   for(const [i,snapshot] of [before,after].entries()) assert.deepEqual((({metadata,elements,elementCount})=>Object.fromEntries(Object.entries({metadata,elements,elementCount}).filter(([,v])=>v!==undefined)))(result.structuredContent.events[i]),presentElements(snapshot,undefined,detail,false));
   assert.equal(result.content.filter(c=>c.type==='image').length,0);
@@ -52,7 +52,7 @@ test('chain supports number/list and rejects invalid presentation options before
   else assert.deepEqual(Object.keys(result.structuredContent.events[0].elements[0]).sort(),['elementId','frame','text','type']);
  }
  for(const value of ['full',null,1,{},['changes']]){
-  const f=fixture([before]);await assert.rejects(f.chain.execute({}, {steps:[{tool:'capture',delay:0}],elementDetail:value},{}),/elementDetail/);assert.equal(f.calls(),0);
+  const f=fixture([before]);await assert.rejects(f.chain.execute({}, {steps:[{tool:'capture',interval:0}],elementDetail:value},{}),/elementDetail/);assert.equal(f.calls(),0);
  }
 });
 
@@ -62,7 +62,7 @@ test('concurrent capture completion order cannot change element baselines',async
   const index=count++;if(index===0)await held;else release();return {structuredContent:index?after:before,content:[{type:'image',mimeType:'image/png',data:'aGk='}]};
  }};
  const chain=createOperationChain([capture],async()=>{});
- const result=await chain.execute({}, {steps:[{tool:'capture',delay:0},{tool:'capture',delay:0}]},{});
+ const result=await chain.execute({}, {steps:[{tool:'capture',interval:0},{tool:'capture',interval:0}]},{});
  assert.equal(result.structuredContent.success,true);
  assert.deepEqual((({metadata,elements})=>({metadata,elements}))(result.structuredContent.events[0]),presentElements(before,undefined,'changes',false));
  assert.deepEqual((({metadata,elements})=>({metadata,elements}))(result.structuredContent.events[1]),presentElements(after,before,'changes',true));
@@ -71,13 +71,13 @@ test('concurrent capture completion order cannot change element baselines',async
 
 test('missing accessibility snapshots break the baseline and each new chain starts independently',async()=>{
  const missing={...metadata(null),elementsError:'AX unavailable'},f=fixture([before,missing,after]);
- const result=await f.chain.execute({}, {steps:Array.from({length:3},()=>({tool:'capture',delay:0}))},{});
+ const result=await f.chain.execute({}, {steps:Array.from({length:3},()=>({tool:'capture',interval:0}))},{});
  assert.equal(result.structuredContent.success,true);
  assert.equal(result.structuredContent.events[1].elements,null);
  assert.equal(result.structuredContent.events[1].elements,null);
  assert.equal(result.structuredContent.events[2].comparedToIndex,1);
  assert.equal(result.structuredContent.events[2].elements,null);
- const fresh=await fixture([after]).chain.execute({}, {steps:[{tool:'capture',delay:0}]},{});
+ const fresh=await fixture([after]).chain.execute({}, {steps:[{tool:'capture',interval:0}]},{});
  assert.equal(fresh.structuredContent.events[0].comparedToIndex,null);
  assert.ok(fresh.structuredContent.events[0].elements.every(e=>e.changeTypes.join()==='appeared'));
 });
@@ -99,15 +99,15 @@ test('actual MCP capture handlers expose chain elementDetail while standalone ca
  try {
   await server.connect(a);await client.connect(b);
   const definition=(await client.listTools()).tools.find(t=>t.name==='operation_chain');assert.equal(definition.inputSchema.properties.elementDetail.default,'changes');
-  const changed=await client.callTool({name:'operation_chain',arguments:{steps:[{tool:'capture',delay:0},{tool:'capture',delay:0.01}]}});
+  const changed=await client.callTool({name:'operation_chain',arguments:{steps:[{tool:'capture',interval:0},{tool:'capture',interval:0.01}]}});
   assert.ok(!changed.isError);assert.equal(changed.structuredContent.events[1].comparedToIndex,0);
   assert.deepEqual(changed.structuredContent.events[1].elements[0].changeTypes,['moved']);assert.equal(changed.content.filter(c=>c.type==='image').length,0);
   for(const detail of ['number','list']) {
-   const result=await client.callTool({name:'operation_chain',arguments:{elementDetail:detail,steps:[{tool:'capture',delay:0}]}});
+   const result=await client.callTool({name:'operation_chain',arguments:{elementDetail:detail,steps:[{tool:'capture',interval:0}]}});
    assert.ok(!result.isError);const metadata=result.structuredContent.events[0];
    if(detail==='number')assert.equal(metadata.elementCount,1);else assert.equal(metadata.elements[0].elementId,'button');
   }
   const direct=await client.callTool({name:'capture',arguments:{}});assert.equal(direct.structuredContent.elements[0].identifier,'button');assert.ok(Object.hasOwn(direct.structuredContent.elements[0],'center'));
-  const invalid=await client.callTool({name:'operation_chain',arguments:{elementDetail:'invalid',steps:[{tool:'capture',delay:0}]}});assert.equal(invalid.isError,true);
+  const invalid=await client.callTool({name:'operation_chain',arguments:{elementDetail:'invalid',steps:[{tool:'capture',interval:0}]}});assert.equal(invalid.isError,true);
  }finally{await client.close();await server.close();}
 });
