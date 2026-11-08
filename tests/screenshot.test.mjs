@@ -164,7 +164,7 @@ test('both captures once, registers separate usable references, and stores one o
   assert.equal(captures,1);
   const [logical,pixel]=response.structuredContent.images;
   assert.notEqual(logical.screenshotId,pixel.screenshotId);
-  assert.deepEqual(Object.keys(logical).sort(),['deviceInfo','imageSize','mode','screenshotId']);
+  assert.deepEqual(Object.keys(logical).sort(),['deviceInfo','imageSize','mode','orientation','screenshotId']);
   assert.ok(response.content.every(block=>block.type==='image'));
   assert.equal(readdirSync(historyDirectory(store)).length,1);
   assert.deepEqual(mapScreenshotArguments(fake,{screenshotId:logical.screenshotId,x:201,y:437}),{x:201,y:437});
