@@ -88,6 +88,7 @@ export class IDBClient {
   private screenshotScales = new Map<string, { udid: string; scale: number; orientation?: number }>();
 
   private screenshotTimings = new Map<string, { timestamp: number; captureTiming: CaptureTiming }>();
+  private simulatorScale?: number;
   private screenReads: Promise<unknown> = Promise.resolve();
 
   getScreenshotTiming(path: string) {
@@ -152,6 +153,7 @@ export class IDBClient {
       await run('idb', ['connect', '--', udid], { timeout: 30000 });
       clearScreenshotCoordinates(this);
       this.udid = udid;
+      this.simulatorScale = undefined;
     } catch (error) {
       throw new Error(`Failed to connect to device ${udid}: ${(error as Error).message}`);
     }
@@ -406,11 +408,26 @@ export class IDBClient {
     return read;
   }
 
+  private async readSimulatorScale(udid: string): Promise<number> {
+    if (this.simulatorScale !== undefined) return this.simulatorScale;
+    const helper = fileURLToPath(new URL('../native/isimbot-display', import.meta.url));
+    try {
+      const { stdout } = await run('xcrun', ['simctl', 'spawn', udid, helper, '--scale'], { timeout: 5000 });
+      const { scale } = JSON.parse(stdout);
+      if (!Number.isFinite(scale) || scale <= 0) throw new Error('Invalid display scale');
+      this.simulatorScale = scale;
+      return scale;
+    } catch {
+      throw new ToolError('Cannot read simulator screen scale. Check that the simulator is booted and the bundled display helper is available.', { code: 'DISPLAY_SCALE_UNAVAILABLE' });
+    }
+  }
+
   private async acquireScreen(outputPath: string | undefined, includeElements: boolean): Promise<ScreenRead> {
     if (!this.udid) throw new Error('No internal device connection. Retry the operation with deviceId.');
     const captureUdid = this.udid;
     const path = outputPath || `${process.env.TMPDIR || '/tmp'}/screenshot-${Date.now()}.png`;
-    const display = await this.displayGeometry();
+    const simulator = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(captureUdid);
+    const simulatorScale = simulator ? await this.readSimulatorScale(captureUdid) : undefined;
     const imageWindow: ReadWindow = { startedAt: 0, finishedAt: 0 };
     const elementsWindow: ReadWindow = { startedAt: 0, finishedAt: 0 };
     const timed = async <T>(window: ReadWindow, operation: () => Promise<T>): Promise<T> => {
@@ -418,26 +435,25 @@ export class IDBClient {
       try { return await operation(); }
       finally { window.finishedAt = Date.now(); }
     };
-    // Both backend reads start in this phase, before re-reading geometry,
-    // resizing, PNG/JPEG encoding, Base64 conversion or saving timeline media.
+    // Start both backend reads together, before image encoding or storage.
     const reads = await Promise.allSettled([
-      timed(imageWindow, () => run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 })),
+      timed(imageWindow, () => simulator
+        ? run('xcrun', ['simctl', 'io', captureUdid, 'screenshot', '--type=png', resolve(path)], { timeout: 10000 })
+        : run('idb', ['screenshot', '--udid', captureUdid, '--json', '--', resolve(path)], { timeout: 10000 })),
       ...(includeElements ? [timed(elementsWindow, () => this.describeUI())] : []),
     ]);
     if (reads[0].status === 'rejected') throw reads[0].reason;
     const { stdout } = reads[0].value as { stdout: string };
     this.screenshotScales.delete(resolve(path));
-    if (display) {
-      const after = await this.displayGeometry();
-      if (JSON.stringify(after) !== JSON.stringify(display)) throw new ToolError('Interface changed during capture. Take a fresh capture after rotation settles.', { code: 'DISPLAY_CHANGED_DURING_CAPTURE' });
+    let scale = simulatorScale;
+    if (!simulator) {
+      try { scale = JSON.parse(stdout).screen_scale; }
+      catch { /* Older idb versions can return no scale metadata. */ }
     }
-    try {
-      const metadata = JSON.parse(stdout);
-      if (typeof metadata.screen_scale === 'number' && Number.isFinite(metadata.screen_scale) && metadata.screen_scale > 0) {
-        this.screenshotScales.set(resolve(path), { udid: captureUdid, scale: metadata.screen_scale, ...(display ? { orientation: display.orientation } : {}) });
-        if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
-      }
-    } catch { /* Older idb versions can return no metadata. Never guess scale. */ }
+    if (typeof scale === 'number' && Number.isFinite(scale) && scale > 0) {
+      this.screenshotScales.set(resolve(path), { udid: captureUdid, scale });
+      if (this.screenshotScales.size > 32) this.screenshotScales.delete(this.screenshotScales.keys().next().value!);
+    }
     const timing = { timestamp: imageWindow.startedAt, captureTiming: { image: imageWindow, ...(includeElements ? { elements: elementsWindow } : {}) } };
     this.screenshotTimings.set(resolve(path), timing);
     if (this.screenshotTimings.size > 32) this.screenshotTimings.delete(this.screenshotTimings.keys().next().value!);

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Capture simulator images with `simctl`, reuse the screen scale per connection, and report portrait or landscape from the returned image dimensions.
+
 - Rename `delay` to `interval` throughout operation-chain requests, timeline results, settings and server instructions; retain start-to-start seconds and unchanged `duration` semantics.
 - Rename minimum timing settings to `minInterval`; read legacy saved settings and observation intervals without rewriting files on read.
 
