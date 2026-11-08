@@ -31,6 +31,7 @@ export async function processScreenshot(path: string, settings: ScreenshotSettin
       const base64 = data.toString('base64');
       return { metadata: {
           deviceInfo: { deviceId: geometry?.udid ?? null, screenSize: logicalSize, scale: logicalSize ? geometry!.scale : null },
+          orientation: info.width > info.height ? 'landscape' : 'portrait',
           imageSize: { width: info.width, height: info.height },
         }, mimeType: `image/${settings.format}`, data: base64 };
 

@@ -1,6 +1,6 @@
 {
   "name": "isimbot-mcp",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "iSimBot-MCP: MCP server for iOS simulator E2E testing via coordinate-based automation",
   "type": "module",
   "main": "dist/index.js",

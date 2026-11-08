@@ -78,6 +78,7 @@ test('pixel and logical images follow interface orientation with correct pixels,
  for(const orientation of[1,2,3,4]){
   const geometry={udid:'device',scale:2,orientation};
   const image=await processScreenshot(path,{mode:'pixel',format:'png',quality:80,maxBytes:10000,maxSavedImages:200},geometry);
+  assert.equal(image.metadata.orientation, orientation >= 3 ? 'landscape' : 'portrait');
   assert.deepEqual(image.metadata.imageSize,orientation>=3?{width:6,height:4}:{width:4,height:6});
   const actual=await sharp(Buffer.from(image.data,'base64')).removeAlpha().raw().toBuffer();assert.deepEqual([...actual.subarray(0,3)],corners[orientation]);
   const logical=await processScreenshot(path,{mode:'logical',format:'png',quality:80,maxBytes:10000,maxSavedImages:200},geometry);
@@ -96,25 +97,24 @@ test('all gestures map interface points into confirmed idb display axes',async t
  await client.pinch(100,50,2,0.5,20);assert.deepEqual(args().slice(-3),['352','100','2']);
 });
 
-test('simulator screenshots retain reliable interface orientation and reject orientation changes or unavailable geometry',async t=>{
- const {existsSync}=await import('node:fs');
- if(!existsSync(new URL('../dist/native/isimbot-display',import.meta.url))){t.skip('Build simulator native tools for this integration test.');return;}
- const dir=mkdtempSync(join(tmpdir(),'isimbot-display-read-')),oldPath=process.env.PATH,mode=join(dir,'mode'),count=join(dir,'count');
- const png=join(dir,'fixture.png');await sharp({create:{width:4,height:6,channels:3,background:'white'}}).png().toFile(png);
- writeFileSync(mode,'stable');writeFileSync(count,'0');
- writeFileSync(join(dir,'xcrun'),`#!${process.execPath}
-const fs=require('node:fs'),args=process.argv.slice(2),mode=fs.readFileSync(${JSON.stringify(mode)},'utf8');
-if(args[0]!=='simctl'||args[1]!=='spawn'||!args[3].endsWith('isimbot-display'))process.exit(1);
-if(mode==='bad'){console.log('bad-geometry');process.exit(0);}
-const n=Number(fs.readFileSync(${JSON.stringify(count)},'utf8'));fs.writeFileSync(${JSON.stringify(count)},String(n+1));
-console.log(JSON.stringify({width:2,height:3,orientation:mode==='change'&&n>0?4:3}));
+test('simulator screenshots read scale once and use simctl pixels without querying orientation', async t => {
+ const dir=mkdtempSync(join(tmpdir(),'isimbot-simctl-')),oldPath=process.env.PATH;
+ const log=join(dir,'args');
+ writeFileSync(join(dir,'xcrun'),`#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(args)+'\\n');
+if(args[1]==='spawn' && args.at(-1)==='--scale') console.log('{"scale":2}');
+else if(args[1]!=='io' || args[3]!=='screenshot') process.exit(1);
 `,{mode:0o755});
- writeFileSync(join(dir,'idb'),`#!${process.execPath}\nconst fs=require('node:fs');fs.copyFileSync(${JSON.stringify(png)},process.argv.at(-1));console.log('{"screen_scale":2}');\n`,{mode:0o755});
- process.env.PATH=`${dir}:${oldPath}`;t.after(()=>{process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
- const client=new IDBClient();client.udid='11111111-2222-3333-4444-555555555555';const path=join(dir,'screen.png');
- await client.screenshot(path);assert.deepEqual(client.getScreenshotGeometry(path),{udid:client.udid,scale:2,orientation:3});
- writeFileSync(mode,'change');writeFileSync(count,'0');await assert.rejects(client.screenshot(path),e=>e.details.code==='DISPLAY_CHANGED_DURING_CAPTURE');assert.equal(client.getScreenshotGeometry(path),undefined);
- writeFileSync(mode,'bad');await assert.rejects(client.screenshot(path),e=>e.details.code==='DISPLAY_GEOMETRY_UNAVAILABLE');
+ process.env.PATH=`${dir}:${oldPath}`;
+ t.after(()=>{process.env.PATH=oldPath;rmSync(dir,{recursive:true,force:true});});
+ const client=new IDBClient();client.udid='11111111-2222-3333-4444-555555555555';
+ const path=join(dir,'screen.png');
+ await client.screenshot(path);
+ await client.screenshot(path);
+ assert.deepEqual(client.getScreenshotGeometry(path),{udid:client.udid,scale:2});
+ const calls=readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);
+ assert.equal(calls[0].at(-1),'--scale');
+ assert.deepEqual(calls.slice(1),Array(2).fill(['simctl','io',client.udid,'screenshot','--type=png',path]));
 });
 
 test('HID mapping distinguishes app interface and Simulator window rotation, including locked interfaces',()=>{
