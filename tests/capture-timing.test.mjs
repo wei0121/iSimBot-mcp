@@ -7,8 +7,32 @@ function fixture(t){const root=mkdtempSync(join(tmpdir(),'isimbot-capture-time-'
 test('capture starts image and AX backend reads together before encoding; queued reads keep frame pairs together',async t=>{
  const dir=fixture(t),log=join(dir,'log'),png=join(dir,'source.png'),old=process.env.PATH;
  await sharp({create:{width:30,height:60,channels:3,background:'white'}}).png().toFile(png);
- writeFileSync(join(dir,'xcrun'),`#!${process.execPath}\nconsole.log(JSON.stringify({orientation:1,width:30,height:60}));`,{mode:0o755});
- writeFileSync(join(dir,'idb'),`#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2),image=args[0]==='screenshot',kind=image?'image':'elements';const log=${JSON.stringify(log)};fs.appendFileSync(log,kind+'-start\\n');setTimeout(()=>{if(image){fs.copyFileSync(${JSON.stringify(png)},args.at(-1));console.log('{"screen_scale":1}');}else console.log('[{"AXLabel":"Current frame","type":"Button","frame":{"x":0,"y":0,"width":30,"height":20}}]');fs.appendFileSync(log,kind+'-end\\n');},100);`,{mode:0o755});
+ const rendezvous = `
+function completePair(kind, peer, finish) {
+ fs.appendFileSync(log, kind + '-start\\n');
+ const count = name => fs.readFileSync(log, 'utf8').split('\\n').filter(line => line === name + '-start').length;
+ const pair = count(kind);
+ const timeout = setTimeout(() => process.exit(2), 3000);
+ const timer = setInterval(() => {
+  if (count(peer) < pair) return;
+  clearTimeout(timeout);
+  clearInterval(timer);
+  finish();
+  fs.appendFileSync(log, kind + '-end\\n');
+ }, 5);
+}
+`;
+ writeFileSync(join(dir,'xcrun'),`#!${process.execPath}\nconst fs=require('node:fs'),args=process.argv.slice(2);
+if(args.at(-1)==='--scale'){console.log('{"scale":1}');process.exit(0);}
+if(args[1]!=='io'||args[3]!=='screenshot')process.exit(1);
+const log=${JSON.stringify(log)};
+${rendezvous}
+completePair('image','elements',()=>fs.copyFileSync(${JSON.stringify(png)},args.at(-1)));
+`,{mode:0o755});
+ writeFileSync(join(dir,'idb'),`#!${process.execPath}\nconst fs=require('node:fs'),log=${JSON.stringify(log)};
+${rendezvous}
+completePair('elements','image',()=>console.log('[{"AXLabel":"Current frame","type":"Button","frame":{"x":0,"y":0,"width":30,"height":20}}]'));
+`,{mode:0o755});
  process.env.PATH=dir+':'+old;t.after(()=>{process.env.PATH=old;});const client=new IDBClient();client.udid=udid;
  const settings=new ScreenshotSettingsStore(join(dir,'screenshot.json'));
  const result=await tools.find(t=>t.definition.name==='capture').execute(client,{},settings);

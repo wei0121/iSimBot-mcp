@@ -33,17 +33,16 @@ coordinate mapping. Rejected/unsupported rotations return an error, without a
 GUI or app-injection fallback. Chain minimum start interval defaults to 1 second
 for rotate and can be adjusted with `setup.minInterval.rotate`.
 
-Simulator images are losslessly turned to the current foreground interface
-orientation before logical/pixel output, without reducing native resolution.
+Simulator screenshots use `simctl io screenshot` and report portrait or
+landscape from the image dimensions. The screen scale is read once per connection.
 Logical touch points use interface coordinates. MCP reads the Simulator display
 rotation through Xcode `devicectl` and converts interface points into the display
 axes expected by idb; idb then performs its native HID conversion. This also
 handles a portrait app in a sideways Simulator window. App-locked
 interfaces use their actual orientation, not a guess from physical orientation.
-A bundled simulator display reader uses a system private API; unavailable or
-changing orientation returns an actionable error rather than guessed coordinates.
+A bundled simulator display reader supplies the interface direction for gestures.
 Local native builds include this reader via `build:observation`. Explicit image
-paths keep the backend PNG; returned images follow the interface orientation.
+paths keep the backend PNG.
 
 ## Device control
 
@@ -406,8 +405,7 @@ and `duration` remain durations in seconds. Chain scheduling uses a monotonic
 clock; its event timestamps use an epoch anchor. A command-start timestamp is
 not a measurement of when the touch reached the app.
 
-Capture validates orientation, then starts screenshot and accessibility reads
-in the same phase; image resizing/encoding follows both reads. Acquisitions are
+Capture starts screenshot and accessibility reads in the same phase; image resizing/encoding follows both reads. Acquisitions are
 queued per device, while gestures may continue. Metadata includes `timestamp`
 and `captureTiming.image` / `captureTiming.elements`, each with epoch-millisecond
 `startedAt` and `finishedAt`. These are backend read windows, not an atomic-frame
